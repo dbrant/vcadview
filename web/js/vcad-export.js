@@ -69,13 +69,17 @@
 
         case 'arc': {
           var full = VCAD.isFullTurn(e.a1, e.a2);
-          var sweep = VCAD.arcSweep(e.a1, e.a2);
+          var sweep = VCAD.arcSweep(e.a1, e.a2, e.cw);
           var circular = Math.abs(Math.abs(e.rx) - Math.abs(e.ry)) < 1e-9;
           if (circular && Math.abs(e.rx) > 0) {
             var r = Math.abs(e.rx);
-            // A rotated circle is still a circle; fold the rotation into the angles.
-            var a1 = (e.a1 + e.rot) * 180 / Math.PI;
-            var a2 = (e.a1 + sweep + e.rot) * 180 / Math.PI;
+            // DXF always measures an ARC counter-clockwise from group 50 to 51,
+            // so a clockwise sweep is written as the same arc the other way up.
+            // A rotated circle is still a circle; fold the rotation in.
+            var from = e.a1, to = e.a1 + sweep;
+            if (sweep < 0) { var sw = from; from = to; to = sw; }
+            var a1 = (from + e.rot) * 180 / Math.PI;
+            var a2 = (to + e.rot) * 180 / Math.PI;
             if (full) {
               head('CIRCLE');
               w.g(10, num(e.x)).g(20, num(e.y)).g(30, '0.0').g(40, num(r));

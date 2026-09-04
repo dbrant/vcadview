@@ -28,10 +28,9 @@ class Doc:
         while i < stop:
             r = self.rs[i]
             t = r[1]
-            if t == 0x66:               # symbol-definition header
-                self.ents.append(dict(kind='symhdr', rec=i, sect=sect, raw=r))
-                i += 1; continue
-            if t != 0x64:
+            # 0x66 marks the first record of a symbol body and is also a
+            # normal entity record; read it like one.
+            if t not in (0x64, 0x66):
                 self.warn[f'{sect}:unexpected tag {t:02x}'] += 1
                 i += 1; continue
             e = self._entity(r, i, sect)
@@ -55,6 +54,7 @@ class Doc:
             e['kind'] = 'arc'
             e['rx'] = f64(r, 0x50); e['ry'] = f64(r, 0x58)
             e['a1'] = f64(r, 0x60); e['a2'] = f64(r, 0x68)
+            e['cw'] = bool(r[0x73] & 0x40)      # sweep direction
             e['rot'] = f64(r, 0x3c)
         elif t == 4:
             e['kind'] = 'text'

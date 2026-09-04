@@ -123,6 +123,11 @@
           e.ry = finite(R.f64(r, 0x58), 0);
           e.a1 = finite(R.f64(r, 0x60), 0);
           e.a2 = finite(R.f64(r, 0x68), 0);
+          // Sweep direction. Between two angles there are two possible arcs;
+          // this bit picks which one. It is never set on a line record, and
+          // honouring it turns the sweep-size distribution from near-uniform
+          // into the 90-degrees-or-less shape real drafting produces.
+          e.cw = (R.byte(r, 0x73) & 0x40) !== 0;
           break;
         case T_TEXT:
           e.kind = 'text';
@@ -169,8 +174,11 @@
       var stop = start + count, r = start, guard = 0;
       while (r < stop && guard++ <= count + 4) {
         var tag = R.byte(r, 0x01);
-        if (tag === 0x66) { r++; continue; }          // symbol-definition header
-        if (tag !== 0x64) {                           // stray or continuation record
+        // 0x66 marks the first record of a symbol body, but it is a perfectly
+        // ordinary entity record as well and has to be read like one. Skipping
+        // it loses one object per symbol -- for the sample drawings that is the
+        // head of the figure used for scale, drawn wherever the symbol lands.
+        if (tag !== 0x64 && tag !== 0x66) {           // stray or continuation record
           if (warnings.length < 50) {
             warnings.push('record ' + r + ': unexpected tag 0x' + tag.toString(16));
           }

@@ -7,6 +7,19 @@ from parse import Doc
 
 MAX_DEPTH = 12
 
+TAU = 2 * math.pi
+
+
+def arc_sweep(a1, a2, cw):
+    """Signed sweep; mirrors VCAD.arcSweep in web/js/vcad-geom.js."""
+    s = (a2 - a1) % TAU
+    if s < 0:
+        s += TAU
+    if s < 1e-12:
+        return -TAU if cw else TAU
+    return s - TAU if cw else s
+
+
 
 def mul(m, n):
     return [m[0]*n[0] + m[2]*n[1], m[1]*n[0] + m[3]*n[1],
@@ -61,9 +74,7 @@ def flatten(d):
             U = av(m, e['rx']*c, e['rx']*s)
             V = av(m, -e['ry']*s, e['ry']*c)
             p = ap(m, e['x'], e['y'])
-            sweep = e['a2'] - e['a1']
-            if sweep <= 1e-12:
-                sweep += 2*math.pi
+            sweep = arc_sweep(e['a1'], e['a2'], e['cw'])
             out.append(('a', p[0], p[1], U[0], U[1], V[0], V[1], e['a1'], e['a1']+sweep, pen, lt))
         elif k == 'type6':
             r = e['raw']
@@ -98,7 +109,7 @@ def flatten(d):
             emit_range(s['start'], s['n'], mul(m, local), depth+1)
 
     for e in d.ents:
-        if e['sect'] == 'main' and e['kind'] != 'symhdr':
+        if e['sect'] == 'main':
             emit(e, [1, 0, 0, 1, 0, 0], 0)
     return out
 

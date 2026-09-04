@@ -33,17 +33,25 @@
   function apply(m, x, y) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]; }
   function applyVec(m, x, y) { return [m[0] * x + m[2] * y, m[1] * x + m[3] * y]; }
 
+  var TAU = 2 * Math.PI;
+
   /**
-   * Arcs are stored as a start and an end angle and always run counter-
-   * clockwise, so an end angle below the start has wrapped past zero.
-   * a1 === a2 is the file's way of saying "full ellipse".
+   * Signed sweep from a1 to a2. Two angles bound two arcs, and `cw` (from the
+   * record's direction bit) says which of them the file means: false takes the
+   * counter-clockwise one, true the clockwise one. a1 === a2 is a full turn.
    */
-  function arcSweep(a1, a2) {
-    var s = a2 - a1;
-    if (s <= 1e-12) s += 2 * Math.PI;
-    return s;
+  function arcSweep(a1, a2, cw) {
+    var s = (a2 - a1) % TAU;
+    if (s < 0) s += TAU;                 // normalise into [0, TAU)
+    if (s < 1e-12) return cw ? -TAU : TAU;
+    return cw ? s - TAU : s;
   }
-  function isFullTurn(a1, a2) { return Math.abs(a2 - a1) <= 1e-12; }
+
+  function isFullTurn(a1, a2) {
+    var s = (a2 - a1) % TAU;
+    if (s < 0) s += TAU;
+    return s < 1e-12;
+  }
 
   function flatten(doc, opts) {
     opts = opts || {};
@@ -85,7 +93,7 @@
           p = apply(m, e.x, e.y);
           base.k = 'a'; base.cx = p[0]; base.cy = p[1];
           base.ux = U[0]; base.uy = U[1]; base.vx = V[0]; base.vy = V[1];
-          base.a1 = e.a1; base.a2 = e.a1 + arcSweep(e.a1, e.a2);
+          base.a1 = e.a1; base.a2 = e.a1 + arcSweep(e.a1, e.a2, e.cw);
           out.push(base); arcs++;
           break;
         }

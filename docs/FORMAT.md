@@ -2,7 +2,7 @@
 
 There is no published specification for this format. Everything below was
 reverse engineered from the ten sample drawings in `samples/`, which cover
-VersaCAD 5.4, 6.0 and 7.0 and between them contain ~18,700 drawable objects.
+VersaCAD 5.4, 6.0 and 7.0 and between them contain ~19,300 drawable objects.
 Confidence is noted per field: **solid** means it is exercised by every sample
 and validated by rendering or by a round trip; **inferred** means the reading is
 consistent with the data but not independently confirmed.
@@ -26,7 +26,7 @@ Byte `0x01` of a record is its **tag**:
 | `0x48`, `0x50` | saved views / plot setups (see §6) |
 | `0x64` | a drawing entity (§3) |
 | `0x58` | a symbol table entry (§4) |
-| `0x66` | symbol-definition header, one before each symbol body |
+| `0x66` | an entity that is *also* the first record of a symbol body (§4) |
 | `0x00` | trailing zero padding |
 
 Records are **not** self-describing about length. A text entity whose string is
@@ -84,7 +84,8 @@ drawing, and it is not decoded here.
 
 ## 2. Entity record shell
 
-Every entity record (tag `0x64`) shares this frame:
+Every entity record (tag `0x64`, or `0x66` for the first record of a symbol
+body) shares this frame:
 
 | Offset | Type | Meaning | Confidence |
 |--------|------|---------|-----------|
@@ -98,6 +99,7 @@ Every entity record (tag `0x64`) shares this frame:
 | `0x3C` | f64 | rotation in radians (arcs, text, symbol inserts) | solid |
 | `0x44` | char[7] | part / layer name, NUL-padded (`new` is the default) | solid |
 | `0x4E` | u8 | subtype — **low nibble is the entity type** | solid |
+| `0x73` | u8 | flag byte; bit `0x40` is the arc sweep direction (§3.2) | solid |
 
 The high nibble of `0x4E` varies (0–11) and is not needed to draw; it tracks
 with drawing structure rather than appearance.
@@ -128,16 +130,31 @@ The end point is `(x + Δx, y + Δy)`. Lines are the most common entity by far.
 | `0x60` | f64 | start angle, radians |
 | `0x68` | f64 | end angle, radians |
 | `0x3C` | f64 | rotation of the ellipse's major axis, radians |
+| `0x73` | bit `0x40` | **sweep direction**: clear = counter-clockwise, set = clockwise |
 
-`(0x1C, 0x24)` is the **centre**. The arc runs **counter-clockwise** from the
-start angle to the end angle; when the end angle is numerically below the start
-angle it has wrapped past zero, so add 2π. Start == end means a full ellipse.
+`(0x1C, 0x24)` is the **centre**. Start == end means a full ellipse.
 
-The direction was settled by rendering both conventions: clockwise breaks the
-head arcs of the human figure in `MAN.2D` into wrong-side circles, while
-counter-clockwise reproduces the figure. Angles are parametric (the ellipse is
-traced as `C + U·cos t + V·sin t`); for circles the two readings coincide, and
-no sample distinguishes them for ellipses.
+Two angles bound *two* arcs, and the direction bit says which one is meant, so
+it cannot be ignored — get it wrong and you draw the complementary arc. Three
+things confirm the reading:
+
+* The bit is **never set on a line record** anywhere in the corpus, and on arcs
+  byte `0x73` only ever holds 0, `0x40`, `0x80` or `0xC0` — it is a clean flag
+  field, and `0x40` is arc-specific.
+* Honouring it turns the distribution of sweep sizes from near-uniform
+  (30 % / 27 % / 28 % / 16 % across the four quadrant bands — the signature of
+  choosing at random) into **64 % at or below 90° and 91 % at or below 180°**,
+  which is what fillets, rounds and corner radii actually look like.
+* The human figures used for scale in `D6100.2D` only come out right with it:
+  their hands, sleeves and shoulders are drawn from short arcs that render as
+  near-complete loops without it.
+
+Angles are parametric (the ellipse is traced as `C + U·cos t + V·sin t`); for
+circles the two readings coincide, and no sample distinguishes them for
+ellipses. Radii are always positive in every sample.
+
+Bit `0x80` of the same byte is set on 38 arcs and 36 lines; its meaning is
+unknown and ignoring it costs nothing visible.
 
 ### 3.3 Type 4 — text
 
@@ -246,8 +263,15 @@ end to end, which is a strong confirmation that `0x16`/`0x18` are read right.
 
 ### Symbol body
 
-A body is an ordinary run of entity records preceded by one `0x66` record. The
-geometry is stored in the drawing's own coordinates around the symbol's base
+A body is an ordinary run of entity records. Its **first record carries tag
+`0x66` instead of `0x64`** — but it is still a full entity and must be drawn.
+It is easy to mistake for a pure header and skip, which silently loses one
+object per symbol: in these drawings that object is the *head* of the figure
+used for scale, so it disappears from every placement. The give-away is that
+the symbol table's declared extent only closes if the `0x66` record is counted
+— for `jim/manf` its ellipse tops out at 68.299 against a declared 68.293.
+
+Geometry is stored in the drawing's own coordinates around the symbol's base
 point, so placing it means translating by `insertion − base`, then scaling and
 rotating. Bodies may contain further inserts; nesting is supported.
 
@@ -290,7 +314,7 @@ plot setups; they hold no drawing content and are skipped.
   header section counts and hits the zero padding exactly, with **no
   unrecognised records**.
 * The browser reader (`web/js/vcad-parse.js` + `vcad-geom.js`) is compared
-  against the Python reference primitive by primitive — 18,670 primitives,
+  against the Python reference primitive by primitive — 19,287 primitives,
   byte-identical output.
 * Exported DXF is read back and compared with the source geometry: total path
   length within 0.25 %, bounding box to 5 decimal places, and every text string
@@ -301,7 +325,8 @@ Run `python tools/verify.py` to reproduce all of it.
 
 ## 8. What is still unknown
 
-* Byte `0x00` flags, and the high nibble of the subtype byte `0x4E`.
+* Byte `0x00` flags, bit `0x80` of byte `0x73`, and the high nibble of the
+  subtype byte `0x4E`.
 * Entity types 5, 7 and 9.
 * Bytes `0x03`, `0x04` and `0x06` of the entity shell.
 * The exact meaning of the low bit of the insert's symbol id.

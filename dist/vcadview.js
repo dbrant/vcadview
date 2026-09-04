@@ -124,6 +124,11 @@
           e.ry = finite(R.f64(r, 0x58), 0);
           e.a1 = finite(R.f64(r, 0x60), 0);
           e.a2 = finite(R.f64(r, 0x68), 0);
+          // Sweep direction. Between two angles there are two possible arcs;
+          // this bit picks which one. It is never set on a line record, and
+          // honouring it turns the sweep-size distribution from near-uniform
+          // into the 90-degrees-or-less shape real drafting produces.
+          e.cw = (R.byte(r, 0x73) & 0x40) !== 0;
           break;
         case T_TEXT:
           e.kind = 'text';
@@ -170,8 +175,11 @@
       var stop = start + count, r = start, guard = 0;
       while (r < stop && guard++ <= count + 4) {
         var tag = R.byte(r, 0x01);
-        if (tag === 0x66) { r++; continue; }          // symbol-definition header
-        if (tag !== 0x64) {                           // stray or continuation record
+        // 0x66 marks the first record of a symbol body, but it is a perfectly
+        // ordinary entity record as well and has to be read like one. Skipping
+        // it loses one object per symbol -- for the sample drawings that is the
+        // head of the figure used for scale, drawn wherever the symbol lands.
+        if (tag !== 0x64 && tag !== 0x66) {           // stray or continuation record
           if (warnings.length < 50) {
             warnings.push('record ' + r + ': unexpected tag 0x' + tag.toString(16));
           }
@@ -255,17 +263,25 @@
   function apply(m, x, y) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]; }
   function applyVec(m, x, y) { return [m[0] * x + m[2] * y, m[1] * x + m[3] * y]; }
 
+  var TAU = 2 * Math.PI;
+
   /**
-   * Arcs are stored as a start and an end angle and always run counter-
-   * clockwise, so an end angle below the start has wrapped past zero.
-   * a1 === a2 is the file's way of saying "full ellipse".
+   * Signed sweep from a1 to a2. Two angles bound two arcs, and `cw` (from the
+   * record's direction bit) says which of them the file means: false takes the
+   * counter-clockwise one, true the clockwise one. a1 === a2 is a full turn.
    */
-  function arcSweep(a1, a2) {
-    var s = a2 - a1;
-    if (s <= 1e-12) s += 2 * Math.PI;
-    return s;
+  function arcSweep(a1, a2, cw) {
+    var s = (a2 - a1) % TAU;
+    if (s < 0) s += TAU;                 // normalise into [0, TAU)
+    if (s < 1e-12) return cw ? -TAU : TAU;
+    return cw ? s - TAU : s;
   }
-  function isFullTurn(a1, a2) { return Math.abs(a2 - a1) <= 1e-12; }
+
+  function isFullTurn(a1, a2) {
+    var s = (a2 - a1) % TAU;
+    if (s < 0) s += TAU;
+    return s < 1e-12;
+  }
 
   function flatten(doc, opts) {
     opts = opts || {};
@@ -307,7 +323,7 @@
           p = apply(m, e.x, e.y);
           base.k = 'a'; base.cx = p[0]; base.cy = p[1];
           base.ux = U[0]; base.uy = U[1]; base.vx = V[0]; base.vy = V[1];
-          base.a1 = e.a1; base.a2 = e.a1 + arcSweep(e.a1, e.a2);
+          base.a1 = e.a1; base.a2 = e.a1 + arcSweep(e.a1, e.a2, e.cw);
           out.push(base); arcs++;
           break;
         }
@@ -868,13 +884,17 @@
 
         case 'arc': {
           var full = VCAD.isFullTurn(e.a1, e.a2);
-          var sweep = VCAD.arcSweep(e.a1, e.a2);
+          var sweep = VCAD.arcSweep(e.a1, e.a2, e.cw);
           var circular = Math.abs(Math.abs(e.rx) - Math.abs(e.ry)) < 1e-9;
           if (circular && Math.abs(e.rx) > 0) {
             var r = Math.abs(e.rx);
-            // A rotated circle is still a circle; fold the rotation into the angles.
-            var a1 = (e.a1 + e.rot) * 180 / Math.PI;
-            var a2 = (e.a1 + sweep + e.rot) * 180 / Math.PI;
+            // DXF always measures an ARC counter-clockwise from group 50 to 51,
+            // so a clockwise sweep is written as the same arc the other way up.
+            // A rotated circle is still a circle; fold the rotation in.
+            var from = e.a1, to = e.a1 + sweep;
+            if (sweep < 0) { var sw = from; from = to; to = sw; }
+            var a1 = (from + e.rot) * 180 / Math.PI;
+            var a2 = (to + e.rot) * 180 / Math.PI;
             if (full) {
               head('CIRCLE');
               w.g(10, num(e.x)).g(20, num(e.y)).g(30, '0.0').g(40, num(r));

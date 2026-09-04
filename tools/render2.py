@@ -15,9 +15,9 @@ def build(d):
     byrec = {e['rec']: e for e in d.ents}
     return syms, byrec
 
-def arcpts(x, y, rx, ry, a1, a2, rot):
-    sweep = a2 - a1
-    if sweep <= 1e-12: sweep += 2*math.pi
+def arcpts(x, y, rx, ry, a1, a2, rot, cw=False):
+    from dump_prims import arc_sweep
+    sweep = arc_sweep(a1, a2, cw)
     n = max(8, int(abs(sweep)/0.08))
     c, s = math.cos(rot), math.sin(rot)
     out = []
@@ -40,7 +40,7 @@ def emit(d, syms, byrec, segs, lo, hi, M, depth=0):
             a = M(e['x'], e['y']); b = M(e['x']+e['dx'], e['y']+e['dy'])
             segs.append((a, b))
         elif k == 'arc':
-            pts = [M(*p) for p in arcpts(e['x'], e['y'], e['rx'], e['ry'], e['a1'], e['a2'], e['rot'])]
+            pts = [M(*p) for p in arcpts(e['x'], e['y'], e['rx'], e['ry'], e['a1'], e['a2'], e['rot'], e['cw'])]
             segs.extend(zip(pts, pts[1:]))
         elif k == 'type8':
             r = e['raw']

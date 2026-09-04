@@ -8,7 +8,7 @@ and the findings are written up in [`docs/FORMAT.md`](docs/FORMAT.md).
 Everything runs client-side. No server, no upload, no network access — the
 drawings never leave the machine.
 
-![The viewer showing a Teledyne Rodney Metals winder assembly drawing](docs/screenshot.jpg)
+![The viewer showing a Teledyne Rodney Metals mill assembly drawing, with the operator figures VersaCAD placed as symbols](docs/screenshot.jpg)
 
 ## Using it
 
@@ -98,7 +98,7 @@ This runs four checks and exits non-zero on any failure:
    section counts, with **no unrecognised records**, landing exactly on the
    file's zero padding.
 2. The browser reader is compared with the Python reference **primitive by
-   primitive** — 18,670 primitives across the samples, byte-identical.
+   primitive** — 19,287 primitives across the samples, byte-identical.
 3. DXF/SVG/PDF export runs, and the exported DXF is read back and compared with
    the source: total path length within 0.25 %, bounding box to five decimals,
    and every text string preserved.
