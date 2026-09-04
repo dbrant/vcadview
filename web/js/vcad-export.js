@@ -111,6 +111,23 @@
           break;
         }
 
+        case 'dim': {
+          // Exploded into plain lines. A real DXF DIMENSION would need a
+          // dimension style table and an anonymous block; the label is already
+          // present as its own TEXT entity either way.
+          var ds = VCAD.dimSegments(e);
+          var dc = Math.cos(e.rot), dsn = Math.sin(e.rot);
+          for (var k = 0; k < ds.length; k++) {
+            var q = ds[k];
+            head('LINE');
+            w.g(10, num(e.x + q[0] * dc - q[1] * dsn))
+             .g(20, num(e.y + q[0] * dsn + q[1] * dc)).g(30, '0.0');
+            w.g(11, num(e.x + q[2] * dc - q[3] * dsn))
+             .g(21, num(e.y + q[2] * dsn + q[3] * dc)).g(31, '0.0');
+          }
+          break;
+        }
+
         case 'text': {
           if (!e.text) break;
           head('TEXT');

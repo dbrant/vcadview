@@ -9,10 +9,13 @@
 
   var REC = 128;
 
-  var VERSIONS = { 0x36: '5.4', 0x3c: '6.0', 0x46: '7.0' };
+  // The version word is the release number times ten: 52 -> 5.2, 70 -> 7.0.
+  function versionName(v) {
+    return (v >= 10 && v <= 999) ? (v / 10).toFixed(1) : '0x' + v.toString(16);
+  }
 
   // Entity type = low nibble of the subtype byte at 0x4e.
-  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_BEZIER = 6, T_INSERT = 8;
+  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8;
 
   function Reader(buf) {
     this.dv = new DataView(buf);
@@ -132,7 +135,7 @@
         case T_TEXT:
           e.kind = 'text';
           // 0x50 is the per-character advance, 0x58 the cap height.
-          // v5.4 stores both as doubles; 6.0 and 7.0 use 32-bit floats.
+          // 5.2 and 5.4 store both as doubles; 6.0 and 7.0 use 32-bit floats.
           if (version <= 0x36) { e.w = R.f64(r, 0x50); e.h = R.f64(r, 0x58); }
           else { e.w = R.f32(r, 0x50); e.h = R.f32(r, 0x58); }
           e.h = finite(e.h, 0); e.w = finite(e.w, 0);
@@ -148,6 +151,20 @@
             e.text = R.str(r, 0x62, L);
           }
           break;
+        case T_DIM:
+          // A linear dimension: the witness lines, the offset dimension line
+          // broken for the label, and two arrowheads. The label itself is the
+          // ordinary text entity in the *following* record, which is drawn on
+          // its own; this record only needs it for sizing the arrows.
+          e.kind = 'dim';
+          e.dx = finite(R.f64(r, 0x50), 0);
+          e.dy = finite(R.f64(r, 0x58), 0);
+          e.offset = finite(R.f64(r, 0x60), 0);    // dimension line offset
+          e.gapHalf = finite(R.f64(r, 0x68), 0);   // half-width of the label gap
+          e.gapMid = finite(R.f64(r, 0x70), 0);    // gap centre along the span
+          e.horiz = (R.byte(r, 0x79) & 0x80) !== 0;
+          break;
+
         case T_BEZIER:
           e.kind = 'bezier';
           // Three control points, stored relative to (x, y).
@@ -194,6 +211,14 @@
     walk(entStart, nPart1, entities);
     walk(part2Start, nPart2, null);
 
+    // Attach each dimension to its label, which is always the next record.
+    for (var rk in byRecord) {
+      var de = byRecord[rk];
+      if (de.kind !== 'dim') continue;
+      var lab = byRecord[de.rec + 1];
+      if (lab && lab.kind === 'text') de.label = lab;
+    }
+
     var stats = {};
     for (var k = 0; k < entities.length; k++) {
       stats[entities[k].kind] = (stats[entities[k].kind] || 0) + 1;
@@ -202,7 +227,7 @@
     return {
       name: name || 'drawing',
       version: version,
-      versionName: VERSIONS[version] || ('0x' + version.toString(16)),
+      versionName: versionName(version),
       extents: extents,
       symbols: symbols,
       symbolList: symbolList,

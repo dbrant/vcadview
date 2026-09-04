@@ -21,6 +21,12 @@ class Doc:
         s3 = s2 + self.n_sym
         self._walk(s3, self.n_part2, 'sym')
         self.end = s3 + self.n_part2
+        byrec = {e['rec']: e for e in self.ents}
+        for e in self.ents:
+            if e['kind'] == 'dim':
+                lab = byrec.get(e['rec'] + 1)
+                if lab is not None and lab['kind'] == 'text':
+                    e['label'] = lab
 
     def _walk(self, start, count, sect):
         i = start
@@ -56,6 +62,13 @@ class Doc:
             e['a1'] = f64(r, 0x60); e['a2'] = f64(r, 0x68)
             e['cw'] = bool(r[0x73] & 0x40)      # sweep direction
             e['rot'] = f64(r, 0x3c)
+        elif t == 5:
+            e['kind'] = 'dim'
+            e['dx'] = f64(r, 0x50); e['dy'] = f64(r, 0x58)
+            e['offset'] = f64(r, 0x60)
+            e['gapHalf'] = f64(r, 0x68)
+            e['gapMid'] = f64(r, 0x70)
+            e['horiz'] = bool(r[0x79] & 0x80)
         elif t == 4:
             e['kind'] = 'text'
             if self.version <= 0x36:

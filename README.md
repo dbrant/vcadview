@@ -68,17 +68,19 @@ and line weight.
 ## What is supported
 
 Lines, circular and elliptical arcs, cubic Bézier curves, text (including the
-multi-record continuation form used for long strings), and symbol placement with
-rotation, scaling and mirroring, nested to any depth. Pens, line types, part
-names and the drawing's own extents are read.
+multi-record continuation form used for long strings), linear dimensions
+(witness lines, arrowheads and the gap left for the label), and symbol
+placement with rotation, scaling and mirroring, nested to any depth. Pens, line
+types, part names and the drawing's own extents are read.
 
-VersaCAD **5.4, 6.0 and 7.0** files all load; the reader detects the version and
-adapts, which matters because text sizing changed from `double` to `float`
-between 5.4 and 6.0.
+VersaCAD **5.2, 5.4, 6.0 and 7.0** files all load; the reader detects the
+version and adapts, which matters because text sizing changed from `double` to
+`float` between 5.4 and 6.0. The version word is simply the release number
+times ten, so newer releases name themselves correctly too.
 
-A small number of entity types — roughly 0.5 % of the objects in the sample
-drawings — are not yet identified. They are skipped and counted rather than
-guessed at; see §3.6 and §8 of the format notes.
+Two rare entity types — well under 0.1 % of the objects in the sample drawings
+— are not yet identified. They are skipped and counted rather than guessed at;
+see §3.7 and §8 of the format notes.
 
 Two things cannot be recovered from a `.2D` file because they were never in it:
 the **stroke fonts** and the real **dash pattern table**, both of which lived in
@@ -98,7 +100,7 @@ This runs four checks and exits non-zero on any failure:
    section counts, with **no unrecognised records**, landing exactly on the
    file's zero padding.
 2. The browser reader is compared with the Python reference **primitive by
-   primitive** — 19,287 primitives across the samples, byte-identical.
+   primitive** — 23,387 primitives across the samples, byte-identical.
 3. DXF/SVG/PDF export runs, and the exported DXF is read back and compared with
    the source: total path length within 0.25 %, bounding box to five decimals,
    and every text string preserved.

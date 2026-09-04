@@ -10,10 +10,13 @@
 
   var REC = 128;
 
-  var VERSIONS = { 0x36: '5.4', 0x3c: '6.0', 0x46: '7.0' };
+  // The version word is the release number times ten: 52 -> 5.2, 70 -> 7.0.
+  function versionName(v) {
+    return (v >= 10 && v <= 999) ? (v / 10).toFixed(1) : '0x' + v.toString(16);
+  }
 
   // Entity type = low nibble of the subtype byte at 0x4e.
-  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_BEZIER = 6, T_INSERT = 8;
+  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8;
 
   function Reader(buf) {
     this.dv = new DataView(buf);
@@ -133,7 +136,7 @@
         case T_TEXT:
           e.kind = 'text';
           // 0x50 is the per-character advance, 0x58 the cap height.
-          // v5.4 stores both as doubles; 6.0 and 7.0 use 32-bit floats.
+          // 5.2 and 5.4 store both as doubles; 6.0 and 7.0 use 32-bit floats.
           if (version <= 0x36) { e.w = R.f64(r, 0x50); e.h = R.f64(r, 0x58); }
           else { e.w = R.f32(r, 0x50); e.h = R.f32(r, 0x58); }
           e.h = finite(e.h, 0); e.w = finite(e.w, 0);
@@ -149,6 +152,20 @@
             e.text = R.str(r, 0x62, L);
           }
           break;
+        case T_DIM:
+          // A linear dimension: the witness lines, the offset dimension line
+          // broken for the label, and two arrowheads. The label itself is the
+          // ordinary text entity in the *following* record, which is drawn on
+          // its own; this record only needs it for sizing the arrows.
+          e.kind = 'dim';
+          e.dx = finite(R.f64(r, 0x50), 0);
+          e.dy = finite(R.f64(r, 0x58), 0);
+          e.offset = finite(R.f64(r, 0x60), 0);    // dimension line offset
+          e.gapHalf = finite(R.f64(r, 0x68), 0);   // half-width of the label gap
+          e.gapMid = finite(R.f64(r, 0x70), 0);    // gap centre along the span
+          e.horiz = (R.byte(r, 0x79) & 0x80) !== 0;
+          break;
+
         case T_BEZIER:
           e.kind = 'bezier';
           // Three control points, stored relative to (x, y).
@@ -195,6 +212,14 @@
     walk(entStart, nPart1, entities);
     walk(part2Start, nPart2, null);
 
+    // Attach each dimension to its label, which is always the next record.
+    for (var rk in byRecord) {
+      var de = byRecord[rk];
+      if (de.kind !== 'dim') continue;
+      var lab = byRecord[de.rec + 1];
+      if (lab && lab.kind === 'text') de.label = lab;
+    }
+
     var stats = {};
     for (var k = 0; k < entities.length; k++) {
       stats[entities[k].kind] = (stats[entities[k].kind] || 0) + 1;
@@ -203,7 +228,7 @@
     return {
       name: name || 'drawing',
       version: version,
-      versionName: VERSIONS[version] || ('0x' + version.toString(16)),
+      versionName: versionName(version),
       extents: extents,
       symbols: symbols,
       symbolList: symbolList,
@@ -277,6 +302,65 @@
     return cw ? s - TAU : s;
   }
 
+  /**
+   * Build a linear dimension out of plain segments, in the entity's own local
+   * frame (origin at its point, before its rotation is applied).
+   *
+   * Local layout, for a horizontal dimension measuring dx:
+   *
+   *      (0,0)                              (dx,dy)
+   *        |  witness                   witness |
+   *        |                                    |
+   *     >--+------------  gap  --------------+--<   at y = offset
+   *
+   * A vertical dimension is the same with the axes swapped.
+   */
+  function dimSegments(e) {
+    var horiz = e.horiz;
+    var span = horiz ? e.dx : e.dy;
+    var len = Math.abs(span);
+    if (!(len > 1e-9)) return [];
+
+    var off = e.offset;
+    var dir = span < 0 ? -1 : 1;
+    // A point `u` along the measured axis, on the dimension line.
+    function at(u) { return horiz ? [dir * u, off] : [off, dir * u]; }
+
+    var segs = [];
+    var start = at(0), end = at(len);
+
+    // Witness lines run from the two measured points out to the dimension line.
+    segs.push([0, 0, start[0], start[1]]);
+    segs.push([e.dx, e.dy, end[0], end[1]]);
+
+    // Dimension line, broken where the label sits.
+    var half = Math.min(Math.abs(e.gapHalf), len / 2);
+    if (half < 1e-9) {
+      segs.push([start[0], start[1], end[0], end[1]]);
+    } else {
+      var mid = Math.min(Math.abs(e.gapMid), len);
+      var g0 = at(Math.max(0, mid - half));
+      var g1 = at(Math.min(len, mid + half));
+      segs.push([start[0], start[1], g0[0], g0[1]]);
+      segs.push([g1[0], g1[1], end[0], end[1]]);
+    }
+
+    // Arrowheads: barbs swept back from each tip along the dimension line.
+    var a = (e.label && e.label.h > 0) ? e.label.h * 0.65 : len * 0.08;
+    a = Math.max(1e-6, Math.min(a, len * 0.2));
+    var ux = horiz ? dir : 0, uy = horiz ? 0 : dir;   // unit vector, start -> end
+    var px = -uy, py = ux;                            // perpendicular
+    [[start, 1], [end, -1]].forEach(function (t) {
+      var tip = t[0], s = t[1];
+      for (var k = -1; k <= 1; k += 2) {
+        segs.push([tip[0], tip[1],
+                   tip[0] + ux * a * s + px * a * 0.38 * k,
+                   tip[1] + uy * a * s + py * a * 0.38 * k]);
+      }
+    });
+    return segs;
+  }
+
   function isFullTurn(a1, a2) {
     var s = (a2 - a1) % TAU;
     if (s < 0) s += TAU;
@@ -286,7 +370,7 @@
   function flatten(doc, opts) {
     opts = opts || {};
     var out = [];
-    var bez = 0, arcs = 0, lines = 0, texts = 0, inserts = 0, missing = {};
+    var bez = 0, arcs = 0, lines = 0, texts = 0, inserts = 0, dims = 0, missing = {};
 
     function emitRange(start, count, m, depth, symName) {
       if (depth > MAX_DEPTH) return;
@@ -339,6 +423,25 @@
           break;
         }
 
+        case 'dim': {
+          var ds = dimSegments(e);
+          if (!ds.length) return;
+          var cr = Math.cos(e.rot), sr = Math.sin(e.rot);
+          var dm = mul(m, [cr, sr, -sr, cr, e.x, e.y]);
+          for (var di = 0; di < ds.length; di++) {
+            var s0 = apply(dm, ds[di][0], ds[di][1]);
+            var s1 = apply(dm, ds[di][2], ds[di][3]);
+            if (s0[0] === s1[0] && s0[1] === s1[1]) continue;
+            out.push({
+              k: 'l', x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
+              pen: base.pen, ltype: base.ltype, level: base.level,
+              part: base.part, sym: base.sym, rec: base.rec
+            });
+            dims++;
+          }
+          break;
+        }
+
         case 'text': {
           if (!e.text || !e.h) return;
           p = apply(m, e.x, e.y);
@@ -384,7 +487,8 @@
 
     return {
       prims: out,
-      counts: { lines: lines, arcs: arcs, beziers: bez, texts: texts, inserts: inserts },
+      counts: { lines: lines, arcs: arcs, beziers: bez, texts: texts,
+                inserts: inserts, dimensions: dims },
       missingSymbols: missing
     };
   }
@@ -402,10 +506,23 @@
       var p = prims[i];
       if (p.k === 'l') { add(p.x1, p.y1); add(p.x2, p.y2); }
       else if (p.k === 'a') {
-        // Extents of C + U cos t + V sin t over the full parameter range;
-        // slightly generous for partial arcs, which is fine for a fit.
-        var rx = Math.hypot(p.ux, p.vx), ry = Math.hypot(p.uy, p.vy);
-        add(p.cx - rx, p.cy - ry); add(p.cx + rx, p.cy + ry);
+        // Exact extent of the swept part of C + U cos t + V sin t: the two
+        // endpoints, plus any stationary point of x or y inside the sweep.
+        // Using the whole ellipse instead would be wildly generous for a long
+        // radius with a short sweep, and zoom-to-fit would show mostly blank.
+        var lo = Math.min(p.a1, p.a2), hi = Math.max(p.a1, p.a2);
+        var atT = function (t) {
+          add(p.cx + p.ux * Math.cos(t) + p.vx * Math.sin(t),
+              p.cy + p.uy * Math.cos(t) + p.vy * Math.sin(t));
+        };
+        atT(p.a1); atT(p.a2);
+        var cand = [Math.atan2(p.vx, p.ux), Math.atan2(p.vy, p.uy)];
+        for (var c = 0; c < 2; c++) {
+          var t0 = cand[c] + Math.PI * Math.ceil((lo - cand[c]) / Math.PI);
+          for (var t = t0, guard = 0; t <= hi + 1e-12 && guard < 8; t += Math.PI, guard++) {
+            atT(t);
+          }
+        }
       } else if (p.k === 'b') {
         for (var j = 0; j < 8; j += 2) add(p.p[j], p.p[j + 1]);
       } else if (p.k === 't') {
@@ -466,6 +583,7 @@
   global.VCAD.tessellate = tessellate;
   global.VCAD.mat = { mul: mul, apply: apply, applyVec: applyVec, IDENT: IDENT };
   global.VCAD.arcSweep = arcSweep;
+  global.VCAD.dimSegments = dimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -923,6 +1041,23 @@
                 e.x + e.c2x, e.y + e.c2y, e.x + e.c3x, e.y + e.c3y]
           };
           polyline(w, VCAD.tessellate(b, opts.flatScale), layer, color, lt, false);
+          break;
+        }
+
+        case 'dim': {
+          // Exploded into plain lines. A real DXF DIMENSION would need a
+          // dimension style table and an anonymous block; the label is already
+          // present as its own TEXT entity either way.
+          var ds = VCAD.dimSegments(e);
+          var dc = Math.cos(e.rot), dsn = Math.sin(e.rot);
+          for (var k = 0; k < ds.length; k++) {
+            var q = ds[k];
+            head('LINE');
+            w.g(10, num(e.x + q[0] * dc - q[1] * dsn))
+             .g(20, num(e.y + q[0] * dsn + q[1] * dc)).g(30, '0.0');
+            w.g(11, num(e.x + q[2] * dc - q[3] * dsn))
+             .g(21, num(e.y + q[2] * dsn + q[3] * dc)).g(31, '0.0');
+          }
           break;
         }
 

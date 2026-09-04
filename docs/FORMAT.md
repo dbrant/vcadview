@@ -1,8 +1,9 @@
 # The VersaCAD `.2D` drawing format
 
 There is no published specification for this format. Everything below was
-reverse engineered from the ten sample drawings in `samples/`, which cover
-VersaCAD 5.4, 6.0 and 7.0 and between them contain ~19,300 drawable objects.
+reverse engineered from the eleven sample drawings in `samples/`, which cover
+VersaCAD 5.2, 5.4, 6.0 and 7.0 and between them contain ~23,400 drawable
+objects.
 Confidence is noted per field: **solid** means it is exercised by every sample
 and validated by rendering or by a round trip; **inferred** means the reading is
 consistent with the data but not independently confirmed.
@@ -33,7 +34,7 @@ Records are **not** self-describing about length. A text entity whose string is
 too long to fit inline is followed by one continuation record whose bytes are
 raw string data — the tag byte of such a record is just a character. The only
 reliable way to walk the file is to use the section counts in the header and the
-per-entity "consumed records" rule in §3.5.
+per-entity "consumed records" rule in §3.3.
 
 ### Sections
 
@@ -42,7 +43,7 @@ Record 0 gives the section table:
 | Offset | Type | Meaning | Confidence |
 |--------|------|---------|-----------|
 | `0x00` | u8×2 | `00 08` signature | solid |
-| `0x02` | u16 | version: `0x36` = 5.4, `0x3C` = 6.0, `0x46` = 7.0 | solid |
+| `0x02` | u16 | version × 10: 52 = 5.2, 54 = 5.4, 60 = 6.0, 70 = 7.0 | solid |
 | `0x04` | u16 | record index where the entity section starts | solid |
 | `0x06` | u16 | record count of entity section **part 1** (the drawing) | solid |
 | `0x08` | u16 | number of symbol-table records | solid |
@@ -60,7 +61,7 @@ Laying those end to end:
 [.. end)                                     zero padding to a 512-byte multiple
 ```
 
-This is exact for all ten samples: the computed end always lands precisely on
+This is exact for all eleven samples: the computed end always lands precisely on
 the start of the zero padding.
 
 ### Header record 1 (tag `0x10`) — drawing extents
@@ -100,6 +101,7 @@ body) shares this frame:
 | `0x44` | char[7] | part / layer name, NUL-padded (`new` is the default) | solid |
 | `0x4E` | u8 | subtype — **low nibble is the entity type** | solid |
 | `0x73` | u8 | flag byte; bit `0x40` is the arc sweep direction (§3.2) | solid |
+| `0x79` | u8 | flag byte; bit `0x80` is the dimension axis (§3.4) | solid |
 
 The high nibble of `0x4E` varies (0–11) and is not needed to draw; it tracks
 with drawing structure rather than appearance.
@@ -160,8 +162,8 @@ unknown and ignoring it costs nothing visible.
 
 | Offset | Type | Meaning |
 |--------|------|---------|
-| `0x50` | f64 (v5.4) / f32 (v6.0, v7.0) | character **advance** (width per character) |
-| `0x58` | f64 (v5.4) / f32 (v6.0, v7.0) | character **height** (cap height) |
+| `0x50` | f64 (5.2, 5.4) / f32 (6.0, 7.0) | character **advance** (width per character) |
+| `0x58` | f64 (5.2, 5.4) / f32 (6.0, 7.0) | character **height** (cap height) |
 | `0x3C` | f64 | rotation, radians |
 | `0x60` | u8 | font number (4 and 5 observed) |
 | `0x61` | u8 | string length, with bit `0x80` as a flag — see below |
@@ -184,9 +186,9 @@ evidence. Three independent checks all point the same way:
   CAD lettering. The other way round it would be 1.3 to 2.0, i.e. characters
   twice as wide as they are tall.
 
-**The float width is a real version difference**, not a heuristic: 5.4 files
-store two doubles here, 6.0 and 7.0 store two 32-bit floats followed by four
-unused bytes. Reading the wrong one yields denormal garbage, so it is easy to
+**The float width is a real version difference**, not a heuristic: 5.2 and 5.4
+files store two doubles here, 6.0 and 7.0 store two 32-bit floats followed by
+four unused bytes. Reading the wrong one yields denormal garbage, so it is easy to
 confirm.
 
 If bit `0x80` of `0x61` is set, the string does **not** live at `0x62` (whatever
@@ -202,7 +204,39 @@ The stroke font itself is not in the file. A viewer has to substitute; because
 the advance is a fixed value per character, a monospaced font is the closest
 match.
 
-### 3.4 Type 6 — cubic Bézier
+### 3.4 Type 5 — linear dimension
+
+| Offset | Type | Meaning |
+|--------|------|---------|
+| `0x50` | f64 | ΔX of the measured span |
+| `0x58` | f64 | ΔY of the measured span |
+| `0x60` | f64 | perpendicular offset of the dimension line |
+| `0x68` | f64 | half-width of the gap left for the label |
+| `0x70` | f64 | position of that gap's centre along the span |
+| `0x3C` | f64 | rotation, radians |
+| `0x79` | bit `0x80` | measured axis: set = horizontal (use ΔX), clear = vertical (use ΔY) |
+
+`(0x1C, 0x24)` is the first measured point; the second is `(x+Δx, y+Δy)`. Only
+one component is measured — the flag says which — so a dimension between two
+points at different heights still reports a purely horizontal or vertical
+distance, and the two witness lines simply come out different lengths.
+
+**The label is not in this record.** It is an ordinary type 4 text entity in the
+**following** record, drawn in the normal way; the dimension only needs it to
+size its arrowheads. All 136 dimensions in the corpus are followed by a text
+record, without exception.
+
+The axis flag was confirmed arithmetically: `0x70` should land at the middle of
+the span, and `|measured| / 2 == value@0x70` holds for **122 of 136** records
+when the axis is chosen by the flag, against **1 of 136** with the axes
+swapped. The fourteen that miss are dimensions whose label was dragged off
+centre along the line, which is exactly what that field is for.
+
+Nothing in the record describes the arrowheads or the tick style, so a viewer
+has to choose: this one draws barbed arrows scaled to 0.65 × the label height
+and capped at a fifth of the span.
+
+### 3.5 Type 6 — cubic Bézier
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -213,7 +247,7 @@ match.
 Consecutive Bézier entities chain: each one's end point is the next one's start
 point, which is how VersaCAD stores a spline.
 
-### 3.5 Type 8 — symbol insert
+### 3.6 Type 8 — symbol insert
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -235,12 +269,12 @@ The placement transform is
 world = T(insertion) · R(rotation) · S(scaleX, scaleY) · T(−symbol base point)
 ```
 
-### 3.6 Types not decoded
+### 3.7 Types not decoded
 
-Types 5 (76 records), 7 (1), 9 (3) and a handful of others carry geometry that
-is not identified. Together they are roughly **0.5 %** of the objects in the
-sample set, and they are annotation-like rather than structural — the drawings
-read correctly without them. The reader skips them and reports the count.
+Types 7 (1 record) and 9 (5) carry geometry that is not identified — type 9
+looks like an angular dimension or a leader, carrying an angle at `0x3C` and a
+radius. Together they are well under **0.1 %** of the objects in the sample
+set. The reader skips them and reports the count.
 
 ---
 
@@ -310,11 +344,11 @@ plot setups; they hold no drawing content and are skipped.
 
 ## 7. How this was checked
 
-* The reference reader (`tools/parse.py`) walks all ten files using only the
+* The reference reader (`tools/parse.py`) walks all eleven files using only the
   header section counts and hits the zero padding exactly, with **no
   unrecognised records**.
 * The browser reader (`web/js/vcad-parse.js` + `vcad-geom.js`) is compared
-  against the Python reference primitive by primitive — 19,287 primitives,
+  against the Python reference primitive by primitive — 23,387 primitives,
   byte-identical output.
 * Exported DXF is read back and compared with the source geometry: total path
   length within 0.25 %, bounding box to 5 decimal places, and every text string
@@ -327,7 +361,7 @@ Run `python tools/verify.py` to reproduce all of it.
 
 * Byte `0x00` flags, bit `0x80` of byte `0x73`, and the high nibble of the
   subtype byte `0x4E`.
-* Entity types 5, 7 and 9.
+* Entity types 7 and 9.
 * Bytes `0x03`, `0x04` and `0x06` of the entity shell.
 * The exact meaning of the low bit of the insert's symbol id.
 * Header records 2–6 beyond the extents (grid, snap, dimension defaults).
