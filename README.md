@@ -5,11 +5,11 @@ No affiliation with VersaCAD; For research and educational purposes only.
 
 A browser-based viewer and converter for VersaCAD `.2D` drawings, the binary
 format used by the DOS/Windows drafting package of the same name. The format is
-undocumented; it was reverse engineered from the sample drawings in `samples/`
+undocumented; it was reverse engineered from drawings discovered in recovered backup archives,
 and the findings are written up in [`docs/FORMAT.md`](docs/FORMAT.md).
 
-Everything runs client-side. No server, no upload, no network access — the
-drawings never leave the machine.
+Everything runs client-side (no server, no uploads, the
+drawings never leave the machine).
 
 ## Using it
 
@@ -130,7 +130,7 @@ web/js/
   vcad-export.js       DXF / SVG / PDF writers
   app.js               UI wiring
 docs/FORMAT.md         the reverse-engineered format specification
-samples/               the VersaCAD drawings used to work the format out
+samples/               the VersaCAD drawings used to work the format out (not committed to this repo)
 tools/
   verify.py            run every check
   bundle.py            build dist/ from web/
