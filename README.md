@@ -1,5 +1,8 @@
 # vcadview — VersaCAD `.2D` viewer and converter
 
+Dmitry Brant, 2026, feat. Claude Code.
+No affiliation with VersaCAD; For research and educational purposes only.
+
 A browser-based viewer and converter for VersaCAD `.2D` drawings, the binary
 format used by the DOS/Windows drafting package of the same name. The format is
 undocumented; it was reverse engineered from the sample drawings in `samples/`
@@ -7,8 +10,6 @@ and the findings are written up in [`docs/FORMAT.md`](docs/FORMAT.md).
 
 Everything runs client-side. No server, no upload, no network access — the
 drawings never leave the machine.
-
-![The viewer showing a Teledyne Rodney Metals mill assembly drawing, with the operator figures VersaCAD placed as symbols](docs/screenshot.jpg)
 
 ## Using it
 
