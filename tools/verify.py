@@ -10,7 +10,7 @@ Checks, in order:
   3. DXF/SVG/PDF export runs, and re-reading the DXF reproduces the source
      geometry (path length, bounding box and every text string). [needs node]
   4. The bundle builds into dist/ as three files - markup, one stylesheet
-     and one script - with no inline CSS or JS and no outside references.
+     and one script - with no inline CSS or JS and no outside assets.
 
 Exit code is non-zero if anything fails.
 """
@@ -180,16 +180,19 @@ def check_bundle(tmp):
     if missing:
         fail('missing from the bundle: ' + ', '.join(missing))
 
-    # Nothing may point outside the dist directory.
-    stray = re.findall(r'(?:src|href)="((?:https?:)?//[^"]+|\.\.?/[^"]+)"', html)
+    # No *asset* may live outside the dist directory, or the app stops working
+    # offline. Ordinary <a href> links are content, not assets, and are fine.
+    assets = re.findall(r'\bsrc="([^"]+)"', html)
+    assets += re.findall(r'<link\b[^>]*\bhref="([^"]+)"', html)
+    stray = [a for a in assets if re.match(r'(?:[a-z][a-z0-9+.-]*:)?//|\.\.?/', a)]
     if stray:
-        fail('bundle references files outside dist: ' + ', '.join(stray))
+        fail('bundle loads assets from outside dist: ' + ', '.join(stray))
 
     if len(FAILS) == before:
         ok(f'{len(src["styles"])} stylesheet(s) -> {bundle.CSS_NAME} ({len(css):,} B), '
            f'{len(src["scripts"])} script(s) -> {bundle.JS_NAME} ({len(js):,} B)')
         ok(f'{bundle.HTML_NAME} ({len(html):,} B) is markup only, '
-           f'and references nothing outside dist/')
+           f'and loads no assets from outside dist/')
 
 
 def main():

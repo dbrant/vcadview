@@ -4,6 +4,13 @@
  * The drawing itself is painted on a canvas by vcad-render.js; nothing here
  * affects it apart from the sheet background, which the renderer owns.
  */
+/* Theme.  The picker in the header writes data-theme on <html>:
+ *   absent          - Auto:  follow the operating system
+ *   data-theme=light - always light
+ *   data-theme=dark  - always dark
+ * The light palette lives on :root and is the fallback. The dark palette is
+ * stated twice, once for "the OS is dark and the user has not forced light"
+ * and once for "the user asked for dark"; the two lists must stay in step. */
 :root {
   --bg: #f6f7f9;
   --panel: #ffffff;
@@ -23,7 +30,7 @@
     color-scheme: dark;
   }
 }
-[data-theme="dark"] {
+:root[data-theme="dark"] {
   --bg: #14171b; --panel: #1b1f24; --ink: #e6e9ee; --muted: #9aa4b0;
   --line: #2c333b; --accent: #4d8ef7; --accent-ink: #0b1220; --chip: #232a32;
   color-scheme: dark;
@@ -42,9 +49,36 @@ header {
   padding: 8px 14px; background: var(--panel);
   border-bottom: 1px solid var(--line); flex: none;
 }
-header h1 { font-size: 14px; margin: 0; font-weight: 650; letter-spacing: .01em; }
-header .sub { color: var(--muted); font-size: 12px; }
+header h1 { font-size: 14px; margin: 0; font-weight: 650; letter-spacing: .01em; flex: none; }
+header .sub {
+  color: var(--muted); font-size: 12px;
+  /* A long file name must ellipsise rather than shove the controls off-screen. */
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 header .spacer { flex: 1; }
+
+/* Segmented picker (Light / Dark / Auto). The radios stay in the accessibility
+   tree and keep arrow-key navigation; only the labels are visible. */
+.seg {
+  position: relative; display: inline-flex; flex: none;
+  border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+}
+.seg input {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.seg label {
+  padding: 5px 10px; font-size: 12px; line-height: 1.5; cursor: pointer;
+  color: var(--muted); background: var(--panel);
+  border-left: 1px solid var(--line); user-select: none; white-space: nowrap;
+}
+.seg label:first-of-type { border-left: 0; }
+.seg label:hover { color: var(--ink); background: var(--chip); }
+.seg input:checked + label {
+  background: var(--accent); color: var(--accent-ink); font-weight: 600;
+}
+.seg input:checked + label:hover { color: var(--accent-ink); background: var(--accent); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 button, .btn {
   font: inherit; padding: 5px 11px; border-radius: 6px;
@@ -71,6 +105,8 @@ main { flex: 1; display: flex; min-height: 0; }
   border-top: 1px solid var(--line);
   color: var(--muted); font-size: 12px; text-align: center; text-wrap: balance;
 }
+#credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+#credit a:hover, #credit a:focus-visible { color: var(--accent); }
 .grp { margin-bottom: 18px; }
 .grp > h2 {
   font-size: 11px; text-transform: uppercase; letter-spacing: .06em;

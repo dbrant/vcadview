@@ -12,7 +12,14 @@
   <span class="sub" id="hdrfile">no drawing loaded</span>
   <span class="spacer"></span>
   <button id="btnSide" title="Toggle the side panel">Panel</button>
-  <button id="btnTheme" title="Switch light / dark interface">Theme</button>
+  <div class="seg" id="theme" role="group" aria-label="Interface theme">
+    <input type="radio" name="theme" id="thLight" value="light">
+    <label for="thLight" title="Always use the light interface">☀️</label>
+    <input type="radio" name="theme" id="thDark" value="dark">
+    <label for="thDark" title="Always use the dark interface">🌙</label>
+    <input type="radio" name="theme" id="thAuto" value="auto" checked>
+    <label for="thAuto" title="Follow the operating system setting">🌗</label>
+  </div>
   <button class="primary" id="btnOpen">Open .2D files</button>
   <input type="file" id="file" accept=".2d,.2D" multiple hidden>
 </header>
@@ -82,8 +89,9 @@
 
     <footer id="credit">
       Vibe coded with <span role="img" aria-label="love">&#10084;&#65039;</span>
-      by Dmitry Brant. Not affiliated with VersaCAD. For research and education
-	  purposes only.
+      by <a href="https://dmitrybrant.com" target="_blank" rel="noopener">Dmitry Brant</a>.
+      Not affiliated with VersaCAD.
+      For research and education purposes only.
     </footer>
   </aside>
 

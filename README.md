@@ -8,7 +8,7 @@ and the findings are written up in [`docs/FORMAT.md`](docs/FORMAT.md).
 Everything runs client-side. No server, no upload, no network access — the
 drawings never leave the machine.
 
-![The viewer showing a 1988 Teledyne Rodney Metals assembly drawing](docs/screenshot.jpg)
+![The viewer showing a Teledyne Rodney Metals winder assembly drawing](docs/screenshot.jpg)
 
 ## Using it
 
@@ -48,8 +48,14 @@ The side panel reports what is in the drawing and lets you switch off individual
 well, so you can, for example, export just the geometry without the annotation
 pen.
 
-Display options cover text on/off, dashed line types on/off, monochrome, a dark
-drawing sheet, and line weight.
+The interface theme is a **Light / Dark / Auto** picker in the header; Auto
+follows the operating system, and the choice is remembered between sessions.
+It is deliberately separate from the **dark drawing sheet** option in the side
+panel, so you can keep a white "paper" sheet under a dark interface, or the
+reverse.
+
+Other display options cover text on/off, dashed line types on/off, monochrome,
+and line weight.
 
 ### Converting
 
@@ -98,7 +104,7 @@ This runs four checks and exits non-zero on any failure:
    and every text string preserved.
 4. The bundle builds into `dist/` as exactly three files, the HTML carries no
    inline CSS or JavaScript, every source file made it into the combined
-   output, and nothing points outside `dist/`.
+   output, and no assets are loaded from outside `dist/`.
 
 Steps 2 and 3 need Node (any recent version) on `PATH`; they are reported as
 failures if it is missing. Steps 1 and 4 need only Python 3 and, for the

@@ -323,13 +323,39 @@
   };
 
   $('btnSide').onclick = function () { $('side').classList.toggle('hidden'); viewer.resize(); };
-  $('btnTheme').onclick = function () {
+  // --------------------------------------------------------------- theming
+
+  // 'auto' leaves data-theme off so the stylesheet's prefers-color-scheme
+  // rules decide; 'light' and 'dark' pin it.
+  var THEME_KEY = 'vcadview.theme';
+  var THEMES = { light: 1, dark: 1, auto: 1 };
+
+  function applyTheme(mode) {
+    if (!THEMES[mode]) mode = 'auto';
     var r = document.documentElement;
-    var now = r.getAttribute('data-theme');
-    var dark = now ? now === 'dark'
-      : matchMedia('(prefers-color-scheme: dark)').matches;
-    r.setAttribute('data-theme', dark ? 'light' : 'dark');
-  };
+    if (mode === 'auto') r.removeAttribute('data-theme');
+    else r.setAttribute('data-theme', mode);
+    var el = document.querySelector('#theme input[value="' + mode + '"]');
+    if (el) el.checked = true;
+    return mode;
+  }
+
+  function storedTheme() {
+    try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+  }
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('#theme input[name="theme"]'),
+    function (el) {
+      el.addEventListener('change', function () {
+        if (!el.checked) return;
+        applyTheme(el.value);
+        try { localStorage.setItem(THEME_KEY, el.value); } catch (e) { /* private mode */ }
+      });
+    }
+  );
+
+  applyTheme(storedTheme() || 'auto');
 
   // ---------------------------------------------------------------- exports
 
