@@ -1,0 +1,130 @@
+# vcadview — VersaCAD `.2D` viewer and converter
+
+A browser-based viewer and converter for VersaCAD `.2D` drawings, the binary
+format used by the DOS/Windows drafting package of the same name. The format is
+undocumented; it was reverse engineered from the sample drawings in `samples/`
+and the findings are written up in [`docs/FORMAT.md`](docs/FORMAT.md).
+
+Everything runs client-side. No server, no upload, no network access — the
+drawings never leave the machine.
+
+![The viewer showing a 1988 Teledyne Rodney Metals assembly drawing](docs/screenshot.jpg)
+
+## Using it
+
+Open **`vcadview.html`** — a single self-contained file — directly from disk,
+then drag `.2D` files onto it. That is the whole install.
+
+The unbundled version is `web/index.html`, which loads the same code from
+`web/js/`. It works from `file://` too; use it when editing the source.
+
+Rebuild the bundle after changing anything under `web/`:
+
+```
+python tools/bundle.py
+```
+
+### Viewing
+
+| Action | |
+|---|---|
+| pan | drag |
+| zoom | mouse wheel (zooms at the cursor) |
+| zoom to a window | shift + drag, or right-drag |
+| fit the drawing | `F`, or double-click |
+| zoom in / out | `+` / `-` |
+
+Drop several files at once to load them together and switch between them in the
+side panel.
+
+The side panel reports what is in the drawing and lets you switch off individual
+**parts/layers**, **pens** or **line types**. Those filters apply to exports as
+well, so you can, for example, export just the geometry without the annotation
+pen.
+
+Display options cover text on/off, dashed line types on/off, monochrome, a dark
+drawing sheet, and line weight.
+
+### Converting
+
+| Format | Notes |
+|---|---|
+| **DXF** | R12 (`AC1009`), the most widely readable flavour. Symbols become `BLOCK`/`INSERT` so the drawing keeps its structure. Lines, circular arcs and text stay as native entities; elliptical arcs and Béziers are flattened to polylines, because R12 has neither an `ELLIPSE` nor a `SPLINE` entity. Pens map to entity colours, VersaCAD parts to layers, and line types to `LTYPE` definitions. |
+| **SVG** | Vector, one path per pen/line-type combination, with real `<text>` elements. Good for the web or for dropping into a document. |
+| **PDF** | Vector, single page, choice of sheet size from A4 to A1 plus US Letter and Tabloid. Text is real selectable text in Courier, whose fixed pitch matches how VersaCAD spaces characters. |
+
+## What is supported
+
+Lines, circular and elliptical arcs, cubic Bézier curves, text (including the
+multi-record continuation form used for long strings), and symbol placement with
+rotation, scaling and mirroring, nested to any depth. Pens, line types, part
+names and the drawing's own extents are read.
+
+VersaCAD **5.4, 6.0 and 7.0** files all load; the reader detects the version and
+adapts, which matters because text sizing changed from `double` to `float`
+between 5.4 and 6.0.
+
+A small number of entity types — roughly 0.5 % of the objects in the sample
+drawings — are not yet identified. They are skipped and counted rather than
+guessed at; see §3.6 and §8 of the format notes.
+
+Two things cannot be recovered from a `.2D` file because they were never in it:
+the **stroke fonts** and the real **dash pattern table**, both of which lived in
+VersaCAD's configuration. The viewer substitutes a monospaced font (matching
+VersaCAD's fixed character advance) and conventional CAD dash patterns scaled to
+the drawing size.
+
+## Verifying
+
+```
+python tools/verify.py
+```
+
+This runs four checks and exits non-zero on any failure:
+
+1. The Python reference reader parses every sample using only the header's
+   section counts, with **no unrecognised records**, landing exactly on the
+   file's zero padding.
+2. The browser reader is compared with the Python reference **primitive by
+   primitive** — 18,670 primitives across the samples, byte-identical.
+3. DXF/SVG/PDF export runs, and the exported DXF is read back and compared with
+   the source: total path length within 0.25 %, bounding box to five decimals,
+   and every text string preserved.
+4. The single-file bundle builds with all scripts inlined and no external
+   references.
+
+Steps 2 and 3 need Node (any recent version) on `PATH`; they are reported as
+failures if it is missing. Steps 1 and 4 need only Python 3 and, for the
+optional PNG rendering in `tools/`, Pillow.
+
+## Layout
+
+```
+vcadview.html          the built single-file app
+web/index.html         unbundled app
+web/js/
+  vcad-parse.js        .2D reader - records, sections, entities
+  vcad-geom.js         entities -> display list, symbol expansion, tessellation
+  vcad-style.js        pen palettes and line-type patterns
+  vcad-render.js       canvas viewer with pan/zoom
+  vcad-export.js       DXF / SVG / PDF writers
+  app.js               UI wiring
+docs/FORMAT.md         the reverse-engineered format specification
+samples/               the VersaCAD drawings used to work the format out
+tools/
+  verify.py            run every check
+  bundle.py            build vcadview.html
+  rec.py, parse.py     Python reference reader
+  dump_prims.py        reference geometry dump (compared against dump-prims.js)
+  dump-prims.js        browser-code geometry dump, run under Node
+  export-samples.js    write DXF/SVG/PDF for every sample
+  dxfcheck.py          read exported DXF back and compare; can render to PNG
+  render2.py           reference renderer, for eyeballing decode changes
+  node-check.js        quick per-file statistics from the browser reader
+  analysis/            the scripts used to reverse engineer the format
+```
+
+`tools/analysis/` is kept deliberately: those scripts are the evidence behind
+the format notes — record tag histograms, per-offset field occupancy maps, the
+arc-direction comparison, the text-extent overlay, and so on. They are useful
+again if an unknown field ever needs chasing.

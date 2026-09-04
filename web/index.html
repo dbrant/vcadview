@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VersaCAD .2D Viewer &amp; Converter</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1b1f24;
+    --muted: #5c6672;
+    --line: #d8dde3;
+    --accent: #1f6feb;
+    --accent-ink: #ffffff;
+    --danger: #b42318;
+    --chip: #eef1f5;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171b; --panel: #1b1f24; --ink: #e6e9ee; --muted: #9aa4b0;
+      --line: #2c333b; --accent: #4d8ef7; --accent-ink: #0b1220; --chip: #232a32;
+      color-scheme: dark;
+    }
+  }
+  [data-theme="dark"] {
+    --bg: #14171b; --panel: #1b1f24; --ink: #e6e9ee; --muted: #9aa4b0;
+    --line: #2c333b; --accent: #4d8ef7; --accent-ink: #0b1220; --chip: #232a32;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--line); flex: none;
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+
+  button, .btn {
+    font: inherit; padding: 5px 11px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    cursor: pointer; white-space: nowrap;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  #side {
+    width: 268px; flex: none; background: var(--panel);
+    border-right: 1px solid var(--line); overflow-y: auto; padding: 12px;
+  }
+  #side.hidden { display: none; }
+  .grp { margin-bottom: 18px; }
+  .grp > h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 7px; font-weight: 600;
+  }
+  .row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  .row .k { color: var(--muted); }
+  .row .v { text-align: right; font-variant-numeric: tabular-nums; word-break: break-all; }
+
+  label.chk {
+    display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer;
+  }
+  label.chk input { margin: 0; flex: none; }
+  label.chk .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; border: 1px solid rgba(0,0,0,.18); }
+  label.chk .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  label.chk .ct { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+  .files { display: flex; flex-direction: column; gap: 3px; }
+  .files button {
+    text-align: left; overflow: hidden; text-overflow: ellipsis;
+    display: flex; justify-content: space-between; gap: 6px;
+  }
+  .files button[aria-current="true"] { background: var(--chip); border-color: var(--accent); }
+
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 100%; }
+
+  #stage { flex: 1; position: relative; min-width: 0; background: var(--bg); }
+  #cv { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  #cv.panning { cursor: grabbing; }
+  #cv.marquee { cursor: crosshair; }
+
+  #rect {
+    position: absolute; border: 1px dashed var(--accent);
+    background: rgba(31,111,235,.10); pointer-events: none; display: none;
+  }
+
+  #status {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; gap: 14px; padding: 4px 10px;
+    background: color-mix(in srgb, var(--panel) 86%, transparent);
+    border-top: 1px solid var(--line); font-size: 12px;
+    font-variant-numeric: tabular-nums; color: var(--muted);
+    backdrop-filter: blur(3px);
+  }
+
+  #drop {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; text-align: center;
+    padding: 24px; background: var(--bg); color: var(--muted);
+  }
+  #drop.hide { display: none; }
+  #drop.over { outline: 2px dashed var(--accent); outline-offset: -14px; }
+  #drop h2 { color: var(--ink); font-size: 17px; margin: 0; }
+  #drop p { margin: 0; max-width: 46ch; }
+
+  #warn {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    max-width: 70%; padding: 7px 12px; border-radius: 7px;
+    background: var(--danger); color: #fff; font-size: 12px; display: none;
+  }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  kbd {
+    background: var(--chip); border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; font: 11px/1.6 ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>VersaCAD <code>.2D</code> Viewer</h1>
+  <span class="sub" id="hdrfile">no drawing loaded</span>
+  <span class="spacer"></span>
+  <button id="btnSide" title="Toggle the side panel">Panel</button>
+  <button id="btnTheme" title="Switch light / dark interface">Theme</button>
+  <button class="primary" id="btnOpen">Open .2D files</button>
+  <input type="file" id="file" accept=".2d,.2D" multiple hidden>
+</header>
+
+<main>
+  <aside id="side">
+    <div class="grp" id="grpFiles" hidden>
+      <h2>Files</h2>
+      <div class="files" id="fileList"></div>
+    </div>
+
+    <div class="grp" id="grpInfo" hidden>
+      <h2>Drawing</h2>
+      <div id="info"></div>
+    </div>
+
+    <div class="grp" id="grpView" hidden>
+      <h2>Display</h2>
+      <label class="chk"><input type="checkbox" id="optText" checked><span class="nm">Text</span></label>
+      <label class="chk"><input type="checkbox" id="optLt" checked><span class="nm">Line types (dashes)</span></label>
+      <label class="chk"><input type="checkbox" id="optMono"><span class="nm">Monochrome</span></label>
+      <label class="chk"><input type="checkbox" id="optDark"><span class="nm">Dark drawing sheet</span></label>
+      <div style="margin-top:8px">
+        <label class="k" for="optWidth">Line weight</label>
+        <input type="range" id="optWidth" min="0.5" max="3" step="0.1" value="1" style="width:100%">
+      </div>
+    </div>
+
+    <div class="grp" id="grpLayers" hidden>
+      <h2>Parts / layers</h2>
+      <div id="layers"></div>
+    </div>
+
+    <div class="grp" id="grpPens" hidden>
+      <h2>Pens</h2>
+      <div id="pens"></div>
+    </div>
+
+    <div class="grp" id="grpLtypes" hidden>
+      <h2>Line types</h2>
+      <div id="ltypes"></div>
+    </div>
+
+    <div class="grp" id="grpExport" hidden>
+      <h2>Export</h2>
+      <div class="btns">
+        <button id="expDxf">DXF</button>
+        <button id="expSvg">SVG</button>
+        <button id="expPdf">PDF</button>
+      </div>
+      <div style="margin-top:8px">
+        <label class="k" for="pdfSize">PDF sheet</label>
+        <select id="pdfSize">
+          <option value="842x595">A4 landscape</option>
+          <option value="595x842">A4 portrait</option>
+          <option value="1191x842">A3 landscape</option>
+          <option value="842x1191">A3 portrait</option>
+          <option value="1684x1191">A2 landscape</option>
+          <option value="2384x1684">A1 landscape</option>
+          <option value="792x612">US Letter landscape</option>
+          <option value="1224x792">US Tabloid landscape</option>
+        </select>
+      </div>
+      <p class="hint">DXF is written as R12 with symbols kept as blocks. Exports follow the
+        visibility filters above.</p>
+    </div>
+  </aside>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="rect"></div>
+    <div id="warn"></div>
+    <div id="drop">
+      <h2>Drop VersaCAD <code>.2D</code> drawings here</h2>
+      <p>Everything runs in your browser &mdash; no file ever leaves this machine.
+         You can also use the <strong>Open</strong> button above.</p>
+      <p class="hint">
+        <kbd>drag</kbd> pan &nbsp; <kbd>wheel</kbd> zoom &nbsp;
+        <kbd>shift</kbd>+drag zoom window &nbsp; <kbd>F</kbd> fit &nbsp;
+        <kbd>double-click</kbd> fit
+      </p>
+    </div>
+    <div id="status">
+      <span id="stPos">&mdash;</span>
+      <span id="stZoom"></span>
+      <span id="stCount"></span>
+    </div>
+  </div>
+</main>
+
+<script src="js/vcad-parse.js"></script>
+<script src="js/vcad-geom.js"></script>
+<script src="js/vcad-style.js"></script>
+<script src="js/vcad-render.js"></script>
+<script src="js/vcad-export.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
