@@ -9,7 +9,8 @@ Checks, in order:
      reference, for all samples.                        [needs node]
   3. DXF/SVG/PDF export runs, and re-reading the DXF reproduces the source
      geometry (path length, bounding box and every text string). [needs node]
-  4. The single-file bundle builds and inlines all scripts.
+  4. The bundle builds into dist/ as three files - markup, one stylesheet
+     and one script - with no inline CSS or JS and no outside references.
 
 Exit code is non-zero if anything fails.
 """
@@ -141,19 +142,54 @@ def check_export(node, tmp):
 
 
 def check_bundle(tmp):
-    print('\n4. Single-file bundle')
+    print('\n4. Bundle (separate html / css / js)')
     import bundle
+    import re
+    before = len(FAILS)
     try:
-        text, n = bundle.build()
+        files, src = bundle.write(os.path.join(tmp, 'dist'))
     except Exception as exc:                           # noqa: BLE001
         fail(f'bundle failed: {exc}')
         return
-    if 'script src=' in text:
-        fail('bundle still references external scripts')
-    elif n < 5:
-        fail(f'bundle inlined only {n} scripts')
-    else:
-        ok(f'{n} scripts inlined, {len(text):,} bytes, no external references')
+
+    by = {os.path.basename(p): (p, n) for p, n in files}
+    for name in (bundle.HTML_NAME, bundle.CSS_NAME, bundle.JS_NAME):
+        if name not in by:
+            fail(f'{name} was not written')
+            return
+
+    html = open(by[bundle.HTML_NAME][0], encoding='utf-8').read()
+    css = open(by[bundle.CSS_NAME][0], encoding='utf-8').read()
+    js = open(by[bundle.JS_NAME][0], encoding='utf-8').read()
+
+    if '<style' in html or '</style>' in html:
+        fail('bundled html still carries inline CSS')
+    if re.search(r'<script(?![^>]*\bsrc=)', html):
+        fail('bundled html still carries inline JavaScript')
+
+    links = re.findall(r'<link rel="stylesheet" href="([^"]+)"', html)
+    srcs = re.findall(r'<script src="([^"]+)"', html)
+    if links != [bundle.CSS_NAME]:
+        fail(f'html should reference exactly {bundle.CSS_NAME}, found {links}')
+    if srcs != [bundle.JS_NAME]:
+        fail(f'html should reference exactly {bundle.JS_NAME}, found {srcs}')
+
+    # Every source file has to have made it into the combined output.
+    missing = [s for s in src['scripts'] if ('==== %s ====' % s) not in js]
+    missing += [s for s in src['styles'] if ('==== %s ====' % s) not in css]
+    if missing:
+        fail('missing from the bundle: ' + ', '.join(missing))
+
+    # Nothing may point outside the dist directory.
+    stray = re.findall(r'(?:src|href)="((?:https?:)?//[^"]+|\.\.?/[^"]+)"', html)
+    if stray:
+        fail('bundle references files outside dist: ' + ', '.join(stray))
+
+    if len(FAILS) == before:
+        ok(f'{len(src["styles"])} stylesheet(s) -> {bundle.CSS_NAME} ({len(css):,} B), '
+           f'{len(src["scripts"])} script(s) -> {bundle.JS_NAME} ({len(js):,} B)')
+        ok(f'{bundle.HTML_NAME} ({len(html):,} B) is markup only, '
+           f'and references nothing outside dist/')
 
 
 def main():

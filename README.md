@@ -12,17 +12,23 @@ drawings never leave the machine.
 
 ## Using it
 
-Open **`vcadview.html`** — a single self-contained file — directly from disk,
-then drag `.2D` files onto it. That is the whole install.
+Open **`dist/vcadview.html`** directly from disk and drag `.2D` files onto it.
+That is the whole install — the three files in `dist/` need no server and make
+no network requests, and plain `<link>` and `<script src>` tags both work from
+a `file://` URL.
 
-The unbundled version is `web/index.html`, which loads the same code from
-`web/js/`. It works from `file://` too; use it when editing the source.
+While editing, use `web/index.html` instead: same code, but as the eight
+separate source files rather than the combined pair.
 
-Rebuild the bundle after changing anything under `web/`:
+Rebuild `dist/` after changing anything under `web/`:
 
 ```
 python tools/bundle.py
 ```
+
+The build concatenates the six scripts into one `vcadview.js` and the
+stylesheet into one `vcadview.css`. Markup, styling and behaviour stay in
+separate files at every stage; nothing is ever inlined into the HTML.
 
 ### Viewing
 
@@ -90,8 +96,9 @@ This runs four checks and exits non-zero on any failure:
 3. DXF/SVG/PDF export runs, and the exported DXF is read back and compared with
    the source: total path length within 0.25 %, bounding box to five decimals,
    and every text string preserved.
-4. The single-file bundle builds with all scripts inlined and no external
-   references.
+4. The bundle builds into `dist/` as exactly three files, the HTML carries no
+   inline CSS or JavaScript, every source file made it into the combined
+   output, and nothing points outside `dist/`.
 
 Steps 2 and 3 need Node (any recent version) on `PATH`; they are reported as
 failures if it is missing. Steps 1 and 4 need only Python 3 and, for the
@@ -100,8 +107,12 @@ optional PNG rendering in `tools/`, Pillow.
 ## Layout
 
 ```
-vcadview.html          the built single-file app
-web/index.html         unbundled app
+dist/                  the built app - open dist/vcadview.html
+  vcadview.html          markup only
+  vcadview.css           the stylesheet
+  vcadview.js            the six scripts, concatenated in load order
+web/index.html         source markup
+web/css/app.css        source stylesheet (interface chrome only)
 web/js/
   vcad-parse.js        .2D reader - records, sections, entities
   vcad-geom.js         entities -> display list, symbol expansion, tessellation
@@ -113,7 +124,7 @@ docs/FORMAT.md         the reverse-engineered format specification
 samples/               the VersaCAD drawings used to work the format out
 tools/
   verify.py            run every check
-  bundle.py            build vcadview.html
+  bundle.py            build dist/ from web/
   rec.py, parse.py     Python reference reader
   dump_prims.py        reference geometry dump (compared against dump-prims.js)
   dump-prims.js        browser-code geometry dump, run under Node
