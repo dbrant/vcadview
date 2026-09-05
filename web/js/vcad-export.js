@@ -135,7 +135,8 @@
           w.g(40, num(e.h));
           w.g(1, e.text);
           if (e.rot) w.g(50, num(e.rot * 180 / Math.PI));
-          var wf = e.h > 0 ? e.w / (DXF_CHAR_ADVANCE * e.h) : 1;
+          var adv = e.w * VCAD.TEXT_WIDTH_SCALE;
+          var wf = e.h > 0 ? adv / (DXF_CHAR_ADVANCE * e.h) : 1;
           if (!isFinite(wf) || wf <= 0) wf = 1;
           w.g(41, num(Math.max(0.05, Math.min(20, wf))));
           break;

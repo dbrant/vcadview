@@ -7,6 +7,9 @@ from parse import Doc
 
 MAX_DEPTH = 12
 
+# Mirrors TEXT_WIDTH_SCALE in web/js/vcad-geom.js.
+TEXT_WIDTH_SCALE = 1.25
+
 TAU = 2 * math.pi
 
 
@@ -139,7 +142,8 @@ def flatten(d):
             axx, axy = av(m, math.cos(ro), math.sin(ro))
             ayx, ayy = av(m, -math.sin(ro), math.cos(ro))
             out.append(('t', p[0], p[1],
-                        e['h']*math.hypot(ayx, ayy), e['w']*math.hypot(axx, axy),
+                        e['h']*math.hypot(ayx, ayy),
+                        e['w']*TEXT_WIDTH_SCALE*math.hypot(axx, axy),
                         math.atan2(axy, axx), pen, lt, e['text']))
         elif k == 'type8':
             r = e['raw']

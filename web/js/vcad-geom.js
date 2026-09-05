@@ -36,6 +36,17 @@
   var TAU = 2 * Math.PI;
 
   /**
+   * Display calibration for text, not a value from the file.
+   *
+   * A drawing stores a per-character advance, but not the stroke font that was
+   * drawn inside it -- that lived in VersaCAD's configuration and is gone. Any
+   * substitute font fills its advance differently, so the rendered lettering
+   * needs a nudge to sit right on the sheet. Applied everywhere text is drawn,
+   * so the viewer, SVG, PDF and DXF all agree.
+   */
+  var TEXT_WIDTH_SCALE = 1.25;
+
+  /**
    * Signed sweep from a1 to a2. Two angles bound two arcs, and `cw` (from the
    * record's direction bit) says which of them the file means: false takes the
    * counter-clockwise one, true the clockwise one. a1 === a2 is a full turn.
@@ -196,7 +207,7 @@
           base.k = 't';
           base.x = p[0]; base.y = p[1];
           base.rot = Math.atan2(ax[1], ax[0]);
-          base.w = e.w * Math.sqrt(ax[0] * ax[0] + ax[1] * ax[1]);
+          base.w = e.w * TEXT_WIDTH_SCALE * Math.sqrt(ax[0] * ax[0] + ax[1] * ax[1]);
           base.h = e.h * Math.sqrt(ay[0] * ay[0] + ay[1] * ay[1]);
           base.s = e.text;
           base.font = e.font;
@@ -328,6 +339,7 @@
   global.VCAD.tessellate = tessellate;
   global.VCAD.mat = { mul: mul, apply: apply, applyVec: applyVec, IDENT: IDENT };
   global.VCAD.arcSweep = arcSweep;
+  global.VCAD.TEXT_WIDTH_SCALE = TEXT_WIDTH_SCALE;
   global.VCAD.dimSegments = dimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);

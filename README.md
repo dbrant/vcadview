@@ -92,11 +92,16 @@ Three rare entity types — 11 records out of 22,600 in the sample drawings
 side panel reports them under **Not drawn**, so a drawing that is quietly
 missing something says so. See §3.7 and §8 of the format notes.
 
-Two things cannot be recovered from a `.2D` file because they were never in it:
-the **stroke fonts** and the real **dash pattern table**, both of which lived in
-VersaCAD's configuration. The viewer substitutes a monospaced font (matching
-VersaCAD's fixed character advance) and conventional CAD dash patterns scaled to
-the drawing size.
+Two things cannot be recovered from a `.2D` file because they were never in
+it: the **stroke fonts** and the real **dash pattern table**, both of which
+lived in VersaCAD's configuration. The viewer substitutes a monospaced font
+and conventional CAD dash patterns scaled to the drawing size.
+
+A drawing does store a per-character advance, so text is laid out at the
+right pitch, but a substitute font fills that advance differently from the
+original strokes. `TEXT_WIDTH_SCALE` in `web/js/vcad-geom.js` calibrates for
+that; it is applied wherever text is drawn, so the viewer and all three
+export formats stay in agreement.
 
 ## Verifying
 
