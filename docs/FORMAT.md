@@ -1,12 +1,15 @@
 # The VersaCAD `.2D` drawing format
 
 There is no published specification for this format. Everything below was
-reverse engineered from the eleven sample drawings in `samples/`, which cover
-VersaCAD 5.2, 5.4, 6.0 and 7.0 and between them contain ~23,400 drawable
-objects.
-Confidence is noted per field: **solid** means it is exercised by every sample
-and validated by rendering or by a round trip; **inferred** means the reading is
-consistent with the data but not independently confirmed.
+reverse engineered from a working set of twelve drawings spanning VersaCAD
+5.2, 5.4, 6.0 and 7.0, containing about 22,600 entities between them. Those
+drawings are not redistributed with this repository, so the evidence for each
+reading is quoted here as counts and measurements rather than as a pointer to
+a particular file.
+
+Confidence is noted per field: **solid** means it is exercised by every drawing
+in that set and validated by rendering or by a round trip; **inferred** means
+the reading is consistent with the data but not independently confirmed.
 
 All values are **little-endian**. Doubles are IEEE-754 binary64 and are *not*
 aligned to 8-byte boundaries — the layout is packed, so read them at the byte
@@ -25,16 +28,24 @@ Byte `0x01` of a record is its **tag**:
 |-----|---------|
 | `0x08`,`0x10`,`0x18`,`0x20`,`0x28`,`0x30`,`0x38` | the seven header records, in that fixed order (records 0–6) |
 | `0x48`, `0x50` | saved views / plot setups (see §6) |
-| `0x64` | a drawing entity (§3) |
+| `0x64`, `0x65`, `0x66` | a drawing entity (§3) — the low two bits are flags |
 | `0x58` | a symbol table entry (§4) |
-| `0x66` | an entity that is *also* the first record of a symbol body (§4) |
 | `0x00` | trailing zero padding |
+
+An entity's tag is `0x64` with two flag bits over it. `0x66` marks the first
+record of a symbol body (§4). `0x65` has so far only been seen on line
+records — 23 of them across the sample set — and its meaning is not known;
+those records are byte-for-byte the same shape as any other line, and dropping
+them loses real geometry. `0x67` has not been seen at all.
 
 Records are **not** self-describing about length. A text entity whose string is
 too long to fit inline is followed by one continuation record whose bytes are
-raw string data — the tag byte of such a record is just a character. The only
-reliable way to walk the file is to use the section counts in the header and the
-per-entity "consumed records" rule in §3.3.
+raw string data — the tag byte of such a record is just a character, and
+`0x64`–`0x67` are `d` to `g`. So the tag doubles as a desync guard: accept only
+the three tags actually observed, and a walk that loses its place complains
+instead of drawing nonsense. The only reliable way to walk the file is the
+section counts in the header plus the per-entity "consumed records" rule in
+§3.3.
 
 ### Sections
 
@@ -61,7 +72,7 @@ Laying those end to end:
 [.. end)                                     zero padding to a 512-byte multiple
 ```
 
-This is exact for all eleven samples: the computed end always lands precisely on
+This is exact for all twelve samples: the computed end always lands precisely on
 the start of the zero padding.
 
 ### Header record 1 (tag `0x10`) — drawing extents
@@ -85,13 +96,12 @@ drawing, and it is not decoded here.
 
 ## 2. Entity record shell
 
-Every entity record (tag `0x64`, or `0x66` for the first record of a symbol
-body) shares this frame:
+Every entity record (tag `0x64`, `0x65` or `0x66`) shares this frame:
 
 | Offset | Type | Meaning | Confidence |
 |--------|------|---------|-----------|
 | `0x00` | u8 | flags (bit 3 and bit 7 are common; meaning unknown) | unknown |
-| `0x01` | u8 | `0x64` tag | solid |
+| `0x01` | u8 | tag: `0x64`, `0x65` or `0x66` (see §1) | solid |
 | `0x02` | u8 | level / group number, 0–30 observed | inferred |
 | `0x05` | u8 | **pen** number, 1–7 | solid |
 | `0x07` | u8 | **line type** number, 1–8 | solid |
@@ -106,9 +116,9 @@ body) shares this frame:
 The high nibble of `0x4E` varies (0–11) and is not needed to draw; it tracks
 with drawing structure rather than appearance.
 
-Pen and line type were confirmed by colour-coding a drawing by each byte: pen
-separates sheet border / geometry / annotation onto different plotter pens, and
-line type 4 traces exactly the axis centrelines of the rollers in `D05724F1.2D`.
+Pen and line type were confirmed by colour-coding drawings by each byte: pen
+separates sheet border, geometry and annotation onto different plotter pens,
+and line type 4 picks out exactly the axis centrelines of turned parts.
 
 ---
 
@@ -147,9 +157,9 @@ things confirm the reading:
   (30 % / 27 % / 28 % / 16 % across the four quadrant bands — the signature of
   choosing at random) into **64 % at or below 90° and 91 % at or below 180°**,
   which is what fillets, rounds and corner radii actually look like.
-* The human figures used for scale in `D6100.2D` only come out right with it:
-  their hands, sleeves and shoulders are drawn from short arcs that render as
-  near-complete loops without it.
+* It shows up directly on screen. Small curved details built from short arcs
+  render as near-complete loops when the bit is ignored, and as the intended
+  curves when it is honoured.
 
 Angles are parametric (the ellipse is traced as `C + U·cos t + V·sin t`); for
 circles the two readings coincide, and no sample distinguishes them for
@@ -172,12 +182,11 @@ unknown and ignoring it costs nothing visible.
 The width-before-height order is easy to get backwards, so it is worth the
 evidence. Three independent checks all point the same way:
 
-* **Table rows share a height, not a width.** The five column headers of the
-  tolerance table in `D05724F1.2D` sit on one row and all carry `0x58` = 0.78,
-  while `0x50` varies per cell (0.409, 0.564, 0.478, 0.471, 0.457) — a draftsman
-  condensing each label to fit its column. The five lines of the legal notice in
-  the same title block behave identically: `0x58` constant, `0x50` nudged per
-  line to justify the paragraph.
+* **Table rows share a height, not a width.** Five column headers sitting on
+  one row of a title-block table all carry `0x58` = 0.78, while `0x50` varies
+  per cell (0.409, 0.564, 0.478, 0.471, 0.457) — a draftsman condensing each
+  label to fit its column. A five-line justified paragraph behaves the same
+  way: `0x58` constant, `0x50` nudged per line to make the lines flush.
 * **Nothing overflows.** Taking `0x50` as the advance, not one of 1,365
   horizontal strings runs past the next vertical rule to its right. Taking
   `0x58` instead, 8.5 % of them do.
@@ -271,10 +280,24 @@ world = T(insertion) · R(rotation) · S(scaleX, scaleY) · T(−symbol base poi
 
 ### 3.7 Types not decoded
 
-Types 7 (1 record) and 9 (5) carry geometry that is not identified — type 9
-looks like an angular dimension or a leader, carrying an angle at `0x3C` and a
-radius. Together they are well under **0.1 %** of the objects in the sample
-set. The reader skips them and reports the count.
+Three types remain unidentified, **11 records out of 22,600** between them:
+
+* **Type 2** (1 record). Laid out exactly like a line — start point plus a
+  delta at `0x50`/`0x58` — but its endpoints do not meet any neighbouring
+  geometry, so it is probably a leader or a construction line rather than an
+  edge.
+* **Type 7** (5 records). A point and a rotation at `0x3C`, and nothing else:
+  every byte from `0x50` on is zero. Too little to draw without inventing it.
+* **Type 9** (5 records). Carries an angle at `0x3C` and a radius; looks like
+  an angular dimension or a leader.
+
+The policy for anything unrecognised is the same throughout, and does not
+depend on which drawing is open: a record whose entity type is not understood
+is skipped and counted, and a record whose tag is not one of the three known
+entity tags is skipped and reported as a warning. Both counts are surfaced in
+the viewer — unknown types under **Not drawn**, unreadable records as **Skipped
+records** — so a drawing that is quietly missing something says so instead of
+just looking subtly wrong. Nothing is invented to fill the gap.
 
 ---
 
@@ -284,8 +307,8 @@ set. The reader skips them and reports the count.
 
 | Offset | Type | Meaning |
 |--------|------|---------|
-| `0x02` | char[9] | group name (e.g. `fas`, `brg`, `jim`) |
-| `0x0B` | char[11] | symbol name (e.g. `sh5`, `manf`) |
+| `0x02` | char[9] | group name, NUL-padded (a library name such as fasteners or bearings) |
+| `0x0B` | char[11] | symbol name within that group, NUL-padded |
 | `0x14` | u16 | index within the group |
 | `0x16` | u16 | **absolute record index** where the symbol body starts |
 | `0x18` | u16 | number of records in the body |
@@ -300,10 +323,11 @@ end to end, which is a strong confirmation that `0x16`/`0x18` are read right.
 A body is an ordinary run of entity records. Its **first record carries tag
 `0x66` instead of `0x64`** — but it is still a full entity and must be drawn.
 It is easy to mistake for a pure header and skip, which silently loses one
-object per symbol: in these drawings that object is the *head* of the figure
-used for scale, so it disappears from every placement. The give-away is that
-the symbol table's declared extent only closes if the `0x66` record is counted
-— for `jim/manf` its ellipse tops out at 68.299 against a declared 68.293.
+object per symbol — and since a symbol is typically placed many times over, a
+single dropped record can account for a lot of absent geometry. The give-away
+is arithmetic: the symbol table's declared extent only closes when the `0x66`
+record is counted. In one symbol that record is an ellipse whose top lands at
+68.299, against a declared extent of 68.293.
 
 Geometry is stored in the drawing's own coordinates around the symbol's base
 point, so placing it means translating by `insertion − base`, then scaling and
@@ -344,11 +368,11 @@ plot setups; they hold no drawing content and are skipped.
 
 ## 7. How this was checked
 
-* The reference reader (`tools/parse.py`) walks all eleven files using only the
-  header section counts and hits the zero padding exactly, with **no
+* The reference reader (`tools/parse.py`) walks every drawing in the set using
+  only the header section counts and hits the zero padding exactly, with **no
   unrecognised records**.
 * The browser reader (`web/js/vcad-parse.js` + `vcad-geom.js`) is compared
-  against the Python reference primitive by primitive — 23,387 primitives,
+  against the Python reference primitive by primitive — 26,294 primitives,
   byte-identical output.
 * Exported DXF is read back and compared with the source geometry: total path
   length within 0.25 %, bounding box to 5 decimal places, and every text string
@@ -361,7 +385,7 @@ Run `python tools/verify.py` to reproduce all of it.
 
 * Byte `0x00` flags, bit `0x80` of byte `0x73`, and the high nibble of the
   subtype byte `0x4E`.
-* Entity types 7 and 9.
+* Entity types 2, 7 and 9, and bit `0x01` of the entity tag.
 * Bytes `0x03`, `0x04` and `0x06` of the entity shell.
 * The exact meaning of the low bit of the insert's symbol id.
 * Header records 2–6 beyond the extents (grid, snap, dimension defaults).

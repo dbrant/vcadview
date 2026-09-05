@@ -191,11 +191,18 @@
       var stop = start + count, r = start, guard = 0;
       while (r < stop && guard++ <= count + 4) {
         var tag = R.byte(r, 0x01);
-        // 0x66 marks the first record of a symbol body, but it is a perfectly
-        // ordinary entity record as well and has to be read like one. Skipping
-        // it loses one object per symbol -- for the sample drawings that is the
-        // head of the figure used for scale, drawn wherever the symbol lands.
-        if (tag !== 0x64 && tag !== 0x66) {           // stray or continuation record
+        // An entity record is tagged 0x64; the low two bits are flags and the
+        // record is an ordinary entity whichever way they fall. 0x66 marks the
+        // first record of a symbol body, 0x65 something not yet identified.
+        // Both carry real geometry and must be read -- skipping 0x66 loses one
+        // object per symbol, which a symbol placed many times multiplies.
+        //
+        // The tag is also the desync guard. A text continuation record holds
+        // raw string bytes, so its "tag" is just a character -- and 0x64..0x67
+        // are 'd' to 'g'. Only the three tags actually observed are accepted,
+        // so a walk that loses its place still complains instead of drawing
+        // nonsense.
+        if (tag !== 0x64 && tag !== 0x65 && tag !== 0x66) {
           if (warnings.length < 50) {
             warnings.push('record ' + r + ': unexpected tag 0x' + tag.toString(16));
           }

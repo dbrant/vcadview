@@ -34,9 +34,11 @@ class Doc:
         while i < stop:
             r = self.rs[i]
             t = r[1]
-            # 0x66 marks the first record of a symbol body and is also a
-            # normal entity record; read it like one.
-            if t not in (0x64, 0x66):
+            # The low two bits of the entity tag are flags (0x66 = first
+            # record of a symbol body, 0x65 = unidentified); the record is an
+            # ordinary entity in every case. Only observed tags are accepted so
+            # that a lost walk still reports rather than drawing nonsense.
+            if t not in (0x64, 0x65, 0x66):
                 self.warn[f'{sect}:unexpected tag {t:02x}'] += 1
                 i += 1; continue
             e = self._entity(r, i, sect)

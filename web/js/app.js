@@ -113,6 +113,23 @@
     html += row('Size', fmt(b.maxx - b.minx) + ' × ' + fmt(b.maxy - b.miny));
     var miss = Object.keys(d.flat.missingSymbols);
     if (miss.length) html += row('Unresolved symbols', miss.join(', '));
+
+    // Anything the reader could not identify, so a drawing that is quietly
+    // missing something says so instead of just looking wrong.
+    var unk = {}, unkTotal = 0;
+    for (var rk in d.doc.byRecord) {
+      var ue = d.doc.byRecord[rk];
+      if (ue.kind !== 'other') continue;
+      unk[ue.type] = (unk[ue.type] || 0) + 1;
+      unkTotal++;
+    }
+    if (unkTotal) {
+      html += row('Not drawn', Object.keys(unk).sort(function (a, b) { return a - b; })
+        .map(function (t) { return unk[t] + ' × type ' + t; }).join(', '));
+    }
+    if (d.doc.warnings.length) {
+      html += row('Skipped records', String(d.doc.warnings.length));
+    }
     $('info').innerHTML = html;
     $('grpInfo').hidden = false;
   }
