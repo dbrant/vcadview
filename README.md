@@ -27,6 +27,14 @@ Rebuild `dist/` after changing anything under `web/`:
 python tools/bundle.py
 ```
 
+To minify the combined JavaScript for distribution, install the build-only
+dependency once, then add `--minify`:
+
+```
+npm install
+python tools/bundle.py --minify
+```
+
 The build concatenates the six scripts into one `vcadview.js` and the
 stylesheet into one `vcadview.css`. Markup, styling and behaviour stay in
 separate files at every stage; nothing is ever inlined into the HTML.
