@@ -1,4 +1,4 @@
-# vcadview — VersaCAD `.2D` viewer and converter
+# vcadview — viewer and converter for VersaCAD `.2D` drawings.
 
 Dmitry Brant, 2026, feat. Claude Code.
 No affiliation with VersaCAD; For research and educational purposes only.
