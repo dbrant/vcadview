@@ -1,4 +1,4 @@
-# vcadview — VersaCAD `.2D` viewer and converter
+# vcadview — viewer and converter for VersaCAD `.2D` drawings.
 
 Dmitry Brant, 2026, feat. Claude Code.
 No affiliation with VersaCAD; For research and educational purposes only.
@@ -25,6 +25,14 @@ Rebuild `dist/` after changing anything under `web/`:
 
 ```
 python tools/bundle.py
+```
+
+To minify the combined JavaScript for distribution, install the build-only
+dependency once, then add `--minify`:
+
+```
+npm install
+python tools/bundle.py --minify
 ```
 
 The build concatenates the six scripts into one `vcadview.js` and the
