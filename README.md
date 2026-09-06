@@ -3,6 +3,8 @@
 Dmitry Brant, 2026, feat. Claude Code.
 No affiliation with VersaCAD; For research and educational purposes only.
 
+([Live web demo](https://rivendell.dmitrybrant.com/vcadview))
+
 A browser-based viewer and converter for VersaCAD `.2D` drawings, the binary
 format used by the DOS/Windows drafting package of the same name. The format is
 undocumented; it was reverse engineered from drawings discovered in recovered backup archives,
