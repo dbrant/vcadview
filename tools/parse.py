@@ -2,6 +2,19 @@
 import sys, os, struct, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rec import *
+import math
+
+
+def signed_angle(a):
+    """Fold into (-pi, pi]; mirrors signedAngle in web/js/vcad-parse.js."""
+    tau = 2 * math.pi
+    a = a % tau
+    if a > math.pi:
+        a -= tau
+    if a <= -math.pi:
+        a += tau
+    return a
+
 
 class Doc:
     def __init__(self, path):
@@ -23,7 +36,7 @@ class Doc:
         self.end = s3 + self.n_part2
         byrec = {e['rec']: e for e in self.ents}
         for e in self.ents:
-            if e['kind'] == 'dim':
+            if e['kind'] in ('dim', 'angdim'):
                 lab = byrec.get(e['rec'] + 1)
                 if lab is not None and lab['kind'] == 'text':
                     e['label'] = lab
@@ -71,6 +84,14 @@ class Doc:
             e['gapHalf'] = f64(r, 0x68)
             e['gapMid'] = f64(r, 0x70)
             e['horiz'] = bool(r[0x79] & 0x80)
+        elif t == 9:
+            e['kind'] = 'angdim'
+            e['a0'] = f64(r, 0x3c)
+            e['radius'] = f64(r, 0x68)
+            e['len2'] = f64(r, 0x60)
+            e['sweep'] = signed_angle(struct.unpack_from('<f', r, 0x70)[0])
+            e['gapHalf'] = abs(struct.unpack_from('<f', r, 0x74)[0])
+            e['gapMid'] = signed_angle(struct.unpack_from('<f', r, 0x78)[0])
         elif t == 4:
             e['kind'] = 'text'
             if self.version <= 0x36:

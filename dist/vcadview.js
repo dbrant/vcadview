@@ -16,7 +16,17 @@
   }
 
   // Entity type = low nibble of the subtype byte at 0x4e.
-  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8;
+  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8,
+      T_ANGDIM = 9;
+
+  /** Fold an angle into (-PI, PI], so a stored 330 degrees reads as -30. */
+  function signedAngle(a) {
+    var TAU = 2 * Math.PI;
+    a = a % TAU;
+    if (a > Math.PI) a -= TAU;
+    if (a <= -Math.PI) a += TAU;
+    return a;
+  }
 
   function Reader(buf) {
     this.dv = new DataView(buf);
@@ -166,6 +176,22 @@
           e.horiz = (R.byte(r, 0x79) & 0x80) !== 0;
           break;
 
+        case T_ANGDIM:
+          // An angular dimension. (0x1C, 0x24) is not the vertex -- it is the
+          // point where the dimension arc starts, one radius out along the
+          // start angle, so the vertex has to be worked back from it. As with
+          // a linear dimension the label is the text entity that follows.
+          e.kind = 'angdim';
+          e.a0 = finite(R.f64(r, 0x3c), 0);        // start angle
+          e.radius = finite(R.f64(r, 0x68), 0);    // radius of the arc
+          e.len2 = finite(R.f64(r, 0x60), 0);      // reach of the second witness line
+          e.sweep = signedAngle(finite(R.f32(r, 0x70), 0));
+          e.gapHalf = Math.abs(finite(R.f32(r, 0x74), 0));
+          e.gapMid = signedAngle(finite(R.f32(r, 0x78), 0));
+          e.vx = e.x - e.radius * Math.cos(e.a0);
+          e.vy = e.y - e.radius * Math.sin(e.a0);
+          break;
+
         case T_BEZIER:
           e.kind = 'bezier';
           // Three control points, stored relative to (x, y).
@@ -219,10 +245,11 @@
     walk(entStart, nPart1, entities);
     walk(part2Start, nPart2, null);
 
-    // Attach each dimension to its label, which is always the next record.
+    // Attach each dimension, linear or angular, to its label: always the
+    // record straight after it.
     for (var rk in byRecord) {
       var de = byRecord[rk];
-      if (de.kind !== 'dim') continue;
+      if (de.kind !== 'dim' && de.kind !== 'angdim') continue;
       var lab = byRecord[de.rec + 1];
       if (lab && lab.kind === 'text') de.label = lab;
     }
@@ -379,6 +406,60 @@
     return segs;
   }
 
+  /**
+   * Build an angular dimension, in a local frame whose origin is the entity's
+   * own point. Returns straight pieces and arc pieces separately so the arc
+   * can stay a real arc downstream instead of a polyline.
+   *
+   *        vertex
+   *          +----------------.  witness 1, at the start angle
+   *           \        __--''    )  arc at `radius`, broken for the label
+   *            '--..__           )
+   *                   `------.   '  witness 2, at the end angle
+   */
+  function angDimSegments(e) {
+    var r = Math.abs(e.radius);
+    if (!(r > 1e-9) || Math.abs(e.sweep) < 1e-9) return null;
+
+    var vx = -r * Math.cos(e.a0), vy = -r * Math.sin(e.a0);   // vertex, local
+    var a1 = e.a0, dir = e.sweep < 0 ? -1 : 1;
+    var lines = [], arcs = [];
+
+    // Witness lines out from the vertex along each bounding ray.
+    var r2 = Math.abs(e.len2) > 1e-9 ? Math.abs(e.len2) : r;
+    lines.push([vx, vy, vx + r * Math.cos(a1), vy + r * Math.sin(a1)]);
+    lines.push([vx, vy,
+                vx + r2 * Math.cos(a1 + e.sweep),
+                vy + r2 * Math.sin(a1 + e.sweep)]);
+
+    // The arc, broken where the label sits.
+    var half = Math.min(e.gapHalf, Math.abs(e.sweep) / 2);
+    if (half < 1e-9) {
+      arcs.push([vx, vy, r, a1, a1 + e.sweep]);
+    } else {
+      var mid = a1 + e.gapMid;
+      arcs.push([vx, vy, r, a1, mid - dir * half]);
+      arcs.push([vx, vy, r, mid + dir * half, a1 + e.sweep]);
+    }
+
+    // Arrowheads, swept back along the arc from each end.
+    var a = (e.label && e.label.h > 0) ? e.label.h * 0.65 : r * 0.08;
+    a = Math.max(1e-6, Math.min(a, r * Math.abs(e.sweep) * 0.3));
+    [[a1, 1], [a1 + e.sweep, -1]].forEach(function (t) {
+      var ang = t[0], s = t[1] * dir;
+      var tipx = vx + r * Math.cos(ang), tipy = vy + r * Math.sin(ang);
+      // tangent at the tip, pointing into the arc
+      var tx = -Math.sin(ang) * s, ty = Math.cos(ang) * s;
+      var px = -ty, py = tx;
+      for (var k = -1; k <= 1; k += 2) {
+        lines.push([tipx, tipy,
+                    tipx + tx * a + px * a * 0.38 * k,
+                    tipy + ty * a + py * a * 0.38 * k]);
+      }
+    });
+    return { lines: lines, arcs: arcs };
+  }
+
   function isFullTurn(a1, a2) {
     var s = (a2 - a1) % TAU;
     if (s < 0) s += TAU;
@@ -457,6 +538,33 @@
             });
             dims++;
           }
+          break;
+        }
+
+        case 'angdim': {
+          var ad = angDimSegments(e);
+          if (!ad) return;
+          var am = mul(m, [1, 0, 0, 1, e.x, e.y]);
+          function attrs() {
+            return { pen: base.pen, ltype: base.ltype, level: base.level,
+                     part: base.part, sym: base.sym, rec: base.rec };
+          }
+          ad.lines.forEach(function (q) {
+            var s0 = apply(am, q[0], q[1]), s1 = apply(am, q[2], q[3]);
+            if (s0[0] === s1[0] && s0[1] === s1[1]) return;
+            var o = attrs();
+            o.k = 'l'; o.x1 = s0[0]; o.y1 = s0[1]; o.x2 = s1[0]; o.y2 = s1[1];
+            out.push(o); dims++;
+          });
+          ad.arcs.forEach(function (q) {
+            var c = apply(am, q[0], q[1]);
+            var U = applyVec(am, q[2], 0), V = applyVec(am, 0, q[2]);
+            var o = attrs();
+            o.k = 'a'; o.cx = c[0]; o.cy = c[1];
+            o.ux = U[0]; o.uy = U[1]; o.vx = V[0]; o.vy = V[1];
+            o.a1 = q[3]; o.a2 = q[4];
+            out.push(o); dims++;
+          });
           break;
         }
 
@@ -605,6 +713,7 @@
   global.VCAD.arcSweep = arcSweep;
   global.VCAD.TEXT_WIDTH_SCALE = TEXT_WIDTH_SCALE;
   global.VCAD.dimSegments = dimSegments;
+  global.VCAD.angDimSegments = angDimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -1079,6 +1188,25 @@
             w.g(11, num(e.x + q[2] * dc - q[3] * dsn))
              .g(21, num(e.y + q[2] * dsn + q[3] * dc)).g(31, '0.0');
           }
+          break;
+        }
+
+        case 'angdim': {
+          var ad = VCAD.angDimSegments(e);
+          if (!ad) break;
+          ad.lines.forEach(function (q) {
+            head('LINE');
+            w.g(10, num(e.x + q[0])).g(20, num(e.y + q[1])).g(30, '0.0');
+            w.g(11, num(e.x + q[2])).g(21, num(e.y + q[3])).g(31, '0.0');
+          });
+          ad.arcs.forEach(function (q) {
+            // DXF measures an ARC counter-clockwise from group 50 to 51.
+            var f = q[3], t = q[4];
+            if (t < f) { var sw2 = f; f = t; t = sw2; }
+            head('ARC');
+            w.g(10, num(e.x + q[0])).g(20, num(e.y + q[1])).g(30, '0.0').g(40, num(q[2]));
+            w.g(50, num(f * 180 / Math.PI)).g(51, num(t * 180 / Math.PI));
+          });
           break;
         }
 

@@ -15,7 +15,17 @@
   }
 
   // Entity type = low nibble of the subtype byte at 0x4e.
-  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8;
+  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8,
+      T_ANGDIM = 9;
+
+  /** Fold an angle into (-PI, PI], so a stored 330 degrees reads as -30. */
+  function signedAngle(a) {
+    var TAU = 2 * Math.PI;
+    a = a % TAU;
+    if (a > Math.PI) a -= TAU;
+    if (a <= -Math.PI) a += TAU;
+    return a;
+  }
 
   function Reader(buf) {
     this.dv = new DataView(buf);
@@ -165,6 +175,22 @@
           e.horiz = (R.byte(r, 0x79) & 0x80) !== 0;
           break;
 
+        case T_ANGDIM:
+          // An angular dimension. (0x1C, 0x24) is not the vertex -- it is the
+          // point where the dimension arc starts, one radius out along the
+          // start angle, so the vertex has to be worked back from it. As with
+          // a linear dimension the label is the text entity that follows.
+          e.kind = 'angdim';
+          e.a0 = finite(R.f64(r, 0x3c), 0);        // start angle
+          e.radius = finite(R.f64(r, 0x68), 0);    // radius of the arc
+          e.len2 = finite(R.f64(r, 0x60), 0);      // reach of the second witness line
+          e.sweep = signedAngle(finite(R.f32(r, 0x70), 0));
+          e.gapHalf = Math.abs(finite(R.f32(r, 0x74), 0));
+          e.gapMid = signedAngle(finite(R.f32(r, 0x78), 0));
+          e.vx = e.x - e.radius * Math.cos(e.a0);
+          e.vy = e.y - e.radius * Math.sin(e.a0);
+          break;
+
         case T_BEZIER:
           e.kind = 'bezier';
           // Three control points, stored relative to (x, y).
@@ -218,10 +244,11 @@
     walk(entStart, nPart1, entities);
     walk(part2Start, nPart2, null);
 
-    // Attach each dimension to its label, which is always the next record.
+    // Attach each dimension, linear or angular, to its label: always the
+    // record straight after it.
     for (var rk in byRecord) {
       var de = byRecord[rk];
-      if (de.kind !== 'dim') continue;
+      if (de.kind !== 'dim' && de.kind !== 'angdim') continue;
       var lab = byRecord[de.rec + 1];
       if (lab && lab.kind === 'text') de.label = lab;
     }

@@ -128,6 +128,25 @@
           break;
         }
 
+        case 'angdim': {
+          var ad = VCAD.angDimSegments(e);
+          if (!ad) break;
+          ad.lines.forEach(function (q) {
+            head('LINE');
+            w.g(10, num(e.x + q[0])).g(20, num(e.y + q[1])).g(30, '0.0');
+            w.g(11, num(e.x + q[2])).g(21, num(e.y + q[3])).g(31, '0.0');
+          });
+          ad.arcs.forEach(function (q) {
+            // DXF measures an ARC counter-clockwise from group 50 to 51.
+            var f = q[3], t = q[4];
+            if (t < f) { var sw2 = f; f = t; t = sw2; }
+            head('ARC');
+            w.g(10, num(e.x + q[0])).g(20, num(e.y + q[1])).g(30, '0.0').g(40, num(q[2]));
+            w.g(50, num(f * 180 / Math.PI)).g(51, num(t * 180 / Math.PI));
+          });
+          break;
+        }
+
         case 'text': {
           if (!e.text) break;
           head('TEXT');

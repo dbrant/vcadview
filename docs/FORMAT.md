@@ -293,9 +293,48 @@ placement off by that offset. Two independent checks say not to:
   reach it only without the subtraction. With it they scatter, because the
   offset is rotated and mirrored differently for each copy.
 
-### 3.7 Types not decoded
+### 3.7 Type 9 — angular dimension
 
-Three types remain unidentified, **11 records out of 22,600** between them:
+| Offset | Type | Meaning |
+|--------|------|---------|
+| `0x3C` | f64 | start angle of the measured wedge, radians |
+| `0x68` | f64 | radius at which the dimension arc is drawn |
+| `0x60` | f64 | reach of the second witness line |
+| `0x70` | **f32** | the measured angle (the sweep), signed |
+| `0x74` | **f32** | half-width of the gap left for the label, radians |
+| `0x78` | **f32** | position of that gap's centre along the sweep, radians |
+
+The layout mirrors the linear dimension (§3.4) with angles in place of
+distances, and like it the label is the type 4 text entity in the **following**
+record.
+
+**`(0x1C, 0x24)` is not the vertex.** It is the point where the dimension arc
+begins — one radius out from the vertex along the start angle — so the vertex
+has to be recovered:
+
+```
+vertex = (x, y) − radius · (cos startAngle, sin startAngle)
+```
+
+That is worth stating because it is checkable and unambiguous: recovering the
+vertex this way lands it exactly (to the last decimal place stored) on the
+common centre of the seven-to-twelve concentric arcs and eight radial lines
+that make up the hub being dimensioned. Using the other length field in the
+record instead misses every time.
+
+The three trailing values are 32-bit floats even in 5.2 files, unlike text
+sizing (§3.3) which is version-dependent. The sweep is signed and can be stored
+as its positive complement, so fold it into (−π, π]: a stored 330° is a 30°
+angle measured the other way round. The check that this is right is that the
+gap centre then lands at half the sweep, which is where an untouched label
+sits — it holds for every angular dimension in the set, in both signs.
+
+Nothing in the record repeats the measured angle in degrees; that only exists
+as the label text, which the draughtsman could and sometimes did edit.
+
+### 3.8 Types not decoded
+
+Two types remain unidentified, **6 records out of 22,600** between them:
 
 * **Type 2** (1 record). Laid out exactly like a line — start point plus a
   delta at `0x50`/`0x58` — but its endpoints do not meet any neighbouring
@@ -303,8 +342,6 @@ Three types remain unidentified, **11 records out of 22,600** between them:
   edge.
 * **Type 7** (5 records). A point and a rotation at `0x3C`, and nothing else:
   every byte from `0x50` on is zero. Too little to draw without inventing it.
-* **Type 9** (5 records). Carries an angle at `0x3C` and a radius; looks like
-  an angular dimension or a leader.
 
 The policy for anything unrecognised is the same throughout, and does not
 depend on which drawing is open: a record whose entity type is not understood
@@ -388,7 +425,7 @@ plot setups; they hold no drawing content and are skipped.
   only the header section counts and hits the zero padding exactly, with **no
   unrecognised records**.
 * The browser reader (`web/js/vcad-parse.js` + `vcad-geom.js`) is compared
-  against the Python reference primitive by primitive — 26,294 primitives,
+  against the Python reference primitive by primitive — 26,334 primitives,
   byte-identical output.
 * Exported DXF is read back and compared with the source geometry: total path
   length within 0.25 %, bounding box to 5 decimal places, and every text string
@@ -401,7 +438,7 @@ Run `python tools/verify.py` to reproduce all of it.
 
 * Byte `0x00` flags, bit `0x80` of byte `0x73`, and the high nibble of the
   subtype byte `0x4E`.
-* Entity types 2, 7 and 9, and bit `0x01` of the entity tag.
+* Entity types 2 and 7, and bit `0x01` of the entity tag.
 * Bytes `0x03`, `0x04` and `0x06` of the entity shell.
 * The exact meaning of the low bit of the insert's symbol id.
 * Header records 2–6 beyond the extents (grid, snap, dimension defaults).

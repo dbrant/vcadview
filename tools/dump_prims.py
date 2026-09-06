@@ -69,6 +69,39 @@ def dim_segments(e):
     return segs
 
 
+
+def ang_dim_segments(e):
+    """Mirrors VCAD.angDimSegments in web/js/vcad-geom.js."""
+    r = abs(e['radius'])
+    if not (r > 1e-9) or abs(e['sweep']) < 1e-9:
+        return None
+    vx, vy = -r*math.cos(e['a0']), -r*math.sin(e['a0'])
+    a1 = e['a0']
+    d = -1 if e['sweep'] < 0 else 1
+    lines, arcs = [], []
+    r2 = abs(e['len2']) if abs(e['len2']) > 1e-9 else r
+    lines.append((vx, vy, vx + r*math.cos(a1), vy + r*math.sin(a1)))
+    lines.append((vx, vy, vx + r2*math.cos(a1+e['sweep']), vy + r2*math.sin(a1+e['sweep'])))
+    half = min(e['gapHalf'], abs(e['sweep'])/2)
+    if half < 1e-9:
+        arcs.append((vx, vy, r, a1, a1+e['sweep']))
+    else:
+        mid = a1 + e['gapMid']
+        arcs.append((vx, vy, r, a1, mid - d*half))
+        arcs.append((vx, vy, r, mid + d*half, a1+e['sweep']))
+    lab = e.get('label')
+    a = lab['h']*0.65 if (lab and lab['h'] > 0) else r*0.08
+    a = max(1e-6, min(a, r*abs(e['sweep'])*0.3))
+    for ang, sgn in ((a1, 1), (a1+e['sweep'], -1)):
+        sg = sgn*d
+        tipx, tipy = vx + r*math.cos(ang), vy + r*math.sin(ang)
+        tx, ty = -math.sin(ang)*sg, math.cos(ang)*sg
+        px, py = -ty, tx
+        for k in (-1, 1):
+            lines.append((tipx, tipy, tipx + tx*a + px*a*0.38*k, tipy + ty*a + py*a*0.38*k))
+    return lines, arcs
+
+
 def flatten(d):
     syms = {}
     for r in d.sym_recs:
@@ -134,6 +167,20 @@ def flatten(d):
                 if a == b:
                     continue
                 out.append(('l', a[0], a[1], b[0], b[1], pen, lt))
+        elif k == 'angdim':
+            ad = ang_dim_segments(e)
+            if not ad:
+                return
+            am = mul(m, [1, 0, 0, 1, e['x'], e['y']])
+            for q in ad[0]:
+                a = ap(am, q[0], q[1]); b = ap(am, q[2], q[3])
+                if a == b:
+                    continue
+                out.append(('l', a[0], a[1], b[0], b[1], pen, lt))
+            for q in ad[1]:
+                c = ap(am, q[0], q[1])
+                U = av(am, q[2], 0); V = av(am, 0, q[2])
+                out.append(('a', c[0], c[1], U[0], U[1], V[0], V[1], q[3], q[4], pen, lt))
         elif k == 'text':
             if not e['text'] or not e['h']:
                 return
