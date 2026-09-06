@@ -298,8 +298,8 @@ placement off by that offset. Two independent checks say not to:
 | Offset | Type | Meaning |
 |--------|------|---------|
 | `0x3C` | f64 | start angle of the measured wedge, radians |
-| `0x68` | f64 | radius at which the dimension arc is drawn |
-| `0x60` | f64 | reach of the second witness line |
+| `0x68` | f64 | vertex to the **inner** end of the witness lines |
+| `0x60` | f64 | inner end **outward to the arc** — the two sum to the arc radius |
 | `0x70` | **f32** | the measured angle (the sweep), signed |
 | `0x74` | **f32** | half-width of the gap left for the label, radians |
 | `0x78` | **f32** | position of that gap's centre along the sweep, radians |
@@ -308,19 +308,23 @@ The layout mirrors the linear dimension (§3.4) with angles in place of
 distances, and like it the label is the type 4 text entity in the **following**
 record.
 
-**`(0x1C, 0x24)` is not the vertex.** It is the point where the dimension arc
-begins — one radius out from the vertex along the start angle — so the vertex
-has to be recovered:
+**`(0x1C, 0x24)` is not the vertex.** It is where the first witness line
+starts, `0x68` out from the vertex along the start angle and just clear of the
+feature being measured, so the vertex has to be recovered:
 
 ```
-vertex = (x, y) − radius · (cos startAngle, sin startAngle)
+vertex   = (x, y) − 0x68 · (cos startAngle, sin startAngle)
+arc drawn at radius 0x68 + 0x60, witness lines spanning 0x68 to that radius
 ```
 
-That is worth stating because it is checkable and unambiguous: recovering the
-vertex this way lands it exactly (to the last decimal place stored) on the
-common centre of the seven-to-twelve concentric arcs and eight radial lines
-that make up the hub being dimensioned. Using the other length field in the
-record instead misses every time.
+Both halves of that are checkable. Recovering the vertex lands it exactly — to
+the last decimal place stored — on the common centre of the seven-to-twelve
+concentric arcs and eight radial lines making up the hub being dimensioned;
+using `0x60` for the same job misses every time. And the two radii have to be
+summed, not used singly: the label sits in the break in the arc, and the
+distance from the vertex to it matches `0x68 + 0x60` for every angular
+dimension in the set, each within the label's own half-height. Taking `0x68`
+alone leaves the arc drawn short, stranded well inside its label.
 
 The three trailing values are 32-bit floats even in 5.2 files, unlike text
 sizing (§3.3) which is version-dependent. The sweep is signed and can be stored

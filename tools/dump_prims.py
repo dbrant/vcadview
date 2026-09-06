@@ -72,27 +72,29 @@ def dim_segments(e):
 
 def ang_dim_segments(e):
     """Mirrors VCAD.angDimSegments in web/js/vcad-geom.js."""
-    r = abs(e['radius'])
+    r0, r = abs(e['r0']), abs(e['rArc'])
     if not (r > 1e-9) or abs(e['sweep']) < 1e-9:
         return None
-    vx, vy = -r*math.cos(e['a0']), -r*math.sin(e['a0'])
+    vx, vy = -r0*math.cos(e['a0']), -r0*math.sin(e['a0'])
     a1 = e['a0']
+    a2 = a1 + e['sweep']
     d = -1 if e['sweep'] < 0 else 1
     lines, arcs = [], []
-    r2 = abs(e['len2']) if abs(e['len2']) > 1e-9 else r
-    lines.append((vx, vy, vx + r*math.cos(a1), vy + r*math.sin(a1)))
-    lines.append((vx, vy, vx + r2*math.cos(a1+e['sweep']), vy + r2*math.sin(a1+e['sweep'])))
+    lines.append((vx + r0*math.cos(a1), vy + r0*math.sin(a1),
+                  vx + r*math.cos(a1), vy + r*math.sin(a1)))
+    lines.append((vx + r0*math.cos(a2), vy + r0*math.sin(a2),
+                  vx + r*math.cos(a2), vy + r*math.sin(a2)))
     half = min(e['gapHalf'], abs(e['sweep'])/2)
     if half < 1e-9:
-        arcs.append((vx, vy, r, a1, a1+e['sweep']))
+        arcs.append((vx, vy, r, a1, a2))
     else:
         mid = a1 + e['gapMid']
         arcs.append((vx, vy, r, a1, mid - d*half))
-        arcs.append((vx, vy, r, mid + d*half, a1+e['sweep']))
+        arcs.append((vx, vy, r, mid + d*half, a2))
     lab = e.get('label')
     a = lab['h']*0.65 if (lab and lab['h'] > 0) else r*0.08
     a = max(1e-6, min(a, r*abs(e['sweep'])*0.3))
-    for ang, sgn in ((a1, 1), (a1+e['sweep'], -1)):
+    for ang, sgn in ((a1, 1), (a2, -1)):
         sg = sgn*d
         tipx, tipy = vx + r*math.cos(ang), vy + r*math.sin(ang)
         tx, ty = -math.sin(ang)*sg, math.cos(ang)*sg

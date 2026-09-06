@@ -129,34 +129,34 @@
    *                   `------.   '  witness 2, at the end angle
    */
   function angDimSegments(e) {
-    var r = Math.abs(e.radius);
+    var r0 = Math.abs(e.r0), r = Math.abs(e.rArc);
     if (!(r > 1e-9) || Math.abs(e.sweep) < 1e-9) return null;
 
-    var vx = -r * Math.cos(e.a0), vy = -r * Math.sin(e.a0);   // vertex, local
-    var a1 = e.a0, dir = e.sweep < 0 ? -1 : 1;
+    var vx = -r0 * Math.cos(e.a0), vy = -r0 * Math.sin(e.a0);   // vertex, local
+    var a1 = e.a0, a2 = a1 + e.sweep, dir = e.sweep < 0 ? -1 : 1;
     var lines = [], arcs = [];
 
-    // Witness lines out from the vertex along each bounding ray.
-    var r2 = Math.abs(e.len2) > 1e-9 ? Math.abs(e.len2) : r;
-    lines.push([vx, vy, vx + r * Math.cos(a1), vy + r * Math.sin(a1)]);
-    lines.push([vx, vy,
-                vx + r2 * Math.cos(a1 + e.sweep),
-                vy + r2 * Math.sin(a1 + e.sweep)]);
+    // Witness lines run outward from the measured feature to the arc, which
+    // sits far enough out for the label to sit in the break in it.
+    lines.push([vx + r0 * Math.cos(a1), vy + r0 * Math.sin(a1),
+                vx + r * Math.cos(a1), vy + r * Math.sin(a1)]);
+    lines.push([vx + r0 * Math.cos(a2), vy + r0 * Math.sin(a2),
+                vx + r * Math.cos(a2), vy + r * Math.sin(a2)]);
 
     // The arc, broken where the label sits.
     var half = Math.min(e.gapHalf, Math.abs(e.sweep) / 2);
     if (half < 1e-9) {
-      arcs.push([vx, vy, r, a1, a1 + e.sweep]);
+      arcs.push([vx, vy, r, a1, a2]);
     } else {
       var mid = a1 + e.gapMid;
       arcs.push([vx, vy, r, a1, mid - dir * half]);
-      arcs.push([vx, vy, r, mid + dir * half, a1 + e.sweep]);
+      arcs.push([vx, vy, r, mid + dir * half, a2]);
     }
 
     // Arrowheads, swept back along the arc from each end.
     var a = (e.label && e.label.h > 0) ? e.label.h * 0.65 : r * 0.08;
     a = Math.max(1e-6, Math.min(a, r * Math.abs(e.sweep) * 0.3));
-    [[a1, 1], [a1 + e.sweep, -1]].forEach(function (t) {
+    [[a1, 1], [a2, -1]].forEach(function (t) {
       var ang = t[0], s = t[1] * dir;
       var tipx = vx + r * Math.cos(ang), tipy = vy + r * Math.sin(ang);
       // tangent at the tip, pointing into the arc

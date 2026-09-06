@@ -181,14 +181,14 @@
           // start angle, so the vertex has to be worked back from it. As with
           // a linear dimension the label is the text entity that follows.
           e.kind = 'angdim';
-          e.a0 = finite(R.f64(r, 0x3c), 0);        // start angle
-          e.radius = finite(R.f64(r, 0x68), 0);    // radius of the arc
-          e.len2 = finite(R.f64(r, 0x60), 0);      // reach of the second witness line
+          e.a0 = finite(R.f64(r, 0x3c), 0);        // start angle of the wedge
+          e.r0 = finite(R.f64(r, 0x68), 0);        // vertex -> where the witness lines start
+          e.rArc = e.r0 + finite(R.f64(r, 0x60), 0);   // ... and where they end, on the arc
           e.sweep = signedAngle(finite(R.f32(r, 0x70), 0));
           e.gapHalf = Math.abs(finite(R.f32(r, 0x74), 0));
           e.gapMid = signedAngle(finite(R.f32(r, 0x78), 0));
-          e.vx = e.x - e.radius * Math.cos(e.a0);
-          e.vy = e.y - e.radius * Math.sin(e.a0);
+          e.vx = e.x - e.r0 * Math.cos(e.a0);
+          e.vy = e.y - e.r0 * Math.sin(e.a0);
           break;
 
         case T_BEZIER:

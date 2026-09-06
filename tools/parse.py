@@ -87,8 +87,8 @@ class Doc:
         elif t == 9:
             e['kind'] = 'angdim'
             e['a0'] = f64(r, 0x3c)
-            e['radius'] = f64(r, 0x68)
-            e['len2'] = f64(r, 0x60)
+            e['r0'] = f64(r, 0x68)
+            e['rArc'] = e['r0'] + f64(r, 0x60)
             e['sweep'] = signed_angle(struct.unpack_from('<f', r, 0x70)[0])
             e['gapHalf'] = abs(struct.unpack_from('<f', r, 0x74)[0])
             e['gapMid'] = signed_angle(struct.unpack_from('<f', r, 0x78)[0])
