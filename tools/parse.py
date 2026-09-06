@@ -34,6 +34,9 @@ class Doc:
         s3 = s2 + self.n_sym
         self._walk(s3, self.n_part2, 'sym')
         self.end = s3 + self.n_part2
+        hs = sorted(e['h'] for e in self.ents
+                    if e['kind'] == 'text' and e.get('h', 0) > 0)
+        self.text_height = hs[len(hs)//2] if hs else 0.0
         byrec = {e['rec']: e for e in self.ents}
         for e in self.ents:
             if e['kind'] in ('dim', 'angdim'):
@@ -86,7 +89,11 @@ class Doc:
             e['offset'] = f64(r, 0x60)
             e['gapHalf'] = f64(r, 0x68)
             e['gapMid'] = f64(r, 0x70)
-            e['horiz'] = bool(r[0x79] & 0x80)
+            e['horiz'] = (r[0x79] & 0x40) == 0
+        elif t == 7:
+            e['kind'] = 'arrow'
+            v = f64(r, 0x3c)                      # same clamp as the JS reader
+            e['a0'] = v if (v == v and -7 <= v <= 7) else 0.0
         elif t == 9:
             e['kind'] = 'angdim'
             e['a0'] = f64(r, 0x3c)

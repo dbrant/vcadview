@@ -122,6 +122,21 @@
           break;
         }
 
+        case 'arrow': {
+          var ah = (doc.textHeight || 0) * 0.65;
+          if (!(ah > 0)) {
+            ah = Math.hypot(doc.extents.maxx - doc.extents.minx,
+                            doc.extents.maxy - doc.extents.miny) * 0.004;
+          }
+          if (!(ah > 0)) break;
+          VCAD.arrowBarbs(e.a0, ah).forEach(function (q) {
+            head('LINE');
+            w.g(10, num(e.x + q[0])).g(20, num(e.y + q[1])).g(30, '0.0');
+            w.g(11, num(e.x + q[2])).g(21, num(e.y + q[3])).g(31, '0.0');
+          });
+          break;
+        }
+
         case 'dim': {
           // Exploded into plain lines. A real DXF DIMENSION would need a
           // dimension style table and an anonymous block; the label is already

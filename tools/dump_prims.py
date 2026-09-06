@@ -170,6 +170,22 @@ def flatten(d):
                 if a == b:
                     continue
                 out.append(('l', a[0], a[1], b[0], b[1], pen, lt))
+        elif k == 'arrow':
+            ah = d.text_height * 0.65
+            if not ah > 0:
+                ext = d.rs[1]
+                ah = math.hypot(f64(ext, 0x0a) - f64(ext, 0x02),
+                                f64(ext, 0x1a) - f64(ext, 0x12)) * 0.004
+            if not ah > 0:
+                return
+            ang = rot_of(e)
+            ux, uy = -math.cos(ang), -math.sin(ang)
+            px, py = -uy, ux
+            for kk in (-1, 1):
+                a = ap(m, e['x'], e['y'])
+                b = ap(m, e['x'] + ux*ah + px*ah*0.38*kk,
+                          e['y'] + uy*ah + py*ah*0.38*kk)
+                out.append(('l', a[0], a[1], b[0], b[1], pen, lt))
         elif k == 'dim':
             ds = dim_segments(e)
             if not ds:

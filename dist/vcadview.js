@@ -17,7 +17,7 @@
 
   // Entity type = low nibble of the subtype byte at 0x4e.
   var T_LINE = 1, T_RECT = 2, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6,
-      T_INSERT = 8, T_ANGDIM = 9;
+      T_ARROW = 7, T_INSERT = 8, T_ANGDIM = 9;
 
   /** Fold an angle into (-PI, PI], so a stored 330 degrees reads as -30. */
   function signedAngle(a) {
@@ -183,7 +183,10 @@
           e.offset = finite(R.f64(r, 0x60), 0);    // dimension line offset
           e.gapHalf = finite(R.f64(r, 0x68), 0);   // half-width of the label gap
           e.gapMid = finite(R.f64(r, 0x70), 0);    // gap centre along the span
-          e.horiz = (R.byte(r, 0x79) & 0x80) !== 0;
+          // Measured axis. The sense is inverted: the bit set means the
+          // dimension measures dY. Picking the wrong axis on a dimension whose
+          // other component is exactly zero draws nothing at all.
+          e.horiz = (R.byte(r, 0x79) & 0x40) === 0;
           break;
 
         case T_ANGDIM:
@@ -209,6 +212,16 @@
           e.c2x = finite(R.f64(r, 0x60), 0); e.c2y = finite(R.f64(r, 0x68), 0);
           e.c3x = finite(R.f64(r, 0x70), 0); e.c3y = finite(R.f64(r, 0x78), 0);
           break;
+        case T_ARROW:
+          // A lone dimension arrowhead: a point and a direction, and nothing
+          // else -- every byte from 0x50 on is zero. Two of them, planted on
+          // the two edges of a feature and pointing at each other, is how a
+          // thickness gets dimensioned. Nothing states the arrow's size, so
+          // the viewer scales it to the drawing's own lettering.
+          e.kind = 'arrow';
+          e.a0 = e.rot;
+          break;
+
         case T_INSERT:
           e.kind = 'insert';
           e.symGroup = R.str(r, 0x50, 9);
@@ -255,6 +268,15 @@
     walk(entStart, nPart1, entities);
     walk(part2Start, nPart2, null);
 
+    // A representative lettering height, used to size arrowheads that carry
+    // no size of their own. The median shrugs off one-off title text.
+    var heights = [];
+    for (var hk in byRecord) {
+      if (byRecord[hk].kind === 'text' && byRecord[hk].h > 0) heights.push(byRecord[hk].h);
+    }
+    heights.sort(function (a, b) { return a - b; });
+    var textHeight = heights.length ? heights[heights.length >> 1] : 0;
+
     // Attach each dimension, linear or angular, to its label: always the
     // record straight after it.
     for (var rk in byRecord) {
@@ -283,6 +305,7 @@
         part2Start: part2Start, nPart2: nPart2, total: R.n
       },
       warnings: warnings,
+      textHeight: textHeight,
       stats: stats
     };
   }
@@ -471,6 +494,21 @@
   }
 
 
+
+  /**
+   * The two barbs of an arrowhead: tip at (0,0) pointing along `ang`, swept
+   * back by `a`. Shared shape with the dimension arrows so they match.
+   */
+  function arrowBarbs(ang, a) {
+    var ux = -Math.cos(ang), uy = -Math.sin(ang);   // back along the shaft
+    var px = -uy, py = ux;
+    var out = [];
+    for (var k = -1; k <= 1; k += 2) {
+      out.push([0, 0, ux * a + px * a * 0.38 * k, uy * a + py * a * 0.38 * k]);
+    }
+    return out;
+  }
+
   /** The four corners of a rectangle entity, in its own unrotated frame. */
   function rectCorners(e) {
     return [[0, 0], [e.dx, 0], [e.dx, e.dy], [0, e.dy]];
@@ -553,6 +591,26 @@
             });
             lines++;
           }
+          break;
+        }
+
+        case 'arrow': {
+          var ah = (doc.textHeight || 0) * 0.65;
+          if (!(ah > 0)) {
+            ah = Math.hypot(doc.extents.maxx - doc.extents.minx,
+                            doc.extents.maxy - doc.extents.miny) * 0.004;
+          }
+          if (!(ah > 0)) return;
+          arrowBarbs(e.a0, ah).forEach(function (q) {
+            var s0 = apply(m, e.x + q[0], e.y + q[1]);
+            var s1 = apply(m, e.x + q[2], e.y + q[3]);
+            out.push({
+              k: 'l', x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
+              pen: base.pen, ltype: base.ltype, level: base.level,
+              part: base.part, sym: base.sym, rec: base.rec
+            });
+            dims++;
+          });
           break;
         }
 
@@ -748,6 +806,7 @@
   global.VCAD.TEXT_WIDTH_SCALE = TEXT_WIDTH_SCALE;
   global.VCAD.dimSegments = dimSegments;
   global.VCAD.rectCorners = rectCorners;
+  global.VCAD.arrowBarbs = arrowBarbs;
   global.VCAD.angDimSegments = angDimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1217,6 +1276,21 @@
                 e.x + e.c2x, e.y + e.c2y, e.x + e.c3x, e.y + e.c3y]
           };
           polyline(w, VCAD.tessellate(b, opts.flatScale), layer, color, lt, false);
+          break;
+        }
+
+        case 'arrow': {
+          var ah = (doc.textHeight || 0) * 0.65;
+          if (!(ah > 0)) {
+            ah = Math.hypot(doc.extents.maxx - doc.extents.minx,
+                            doc.extents.maxy - doc.extents.miny) * 0.004;
+          }
+          if (!(ah > 0)) break;
+          VCAD.arrowBarbs(e.a0, ah).forEach(function (q) {
+            head('LINE');
+            w.g(10, num(e.x + q[0])).g(20, num(e.y + q[1])).g(30, '0.0');
+            w.g(11, num(e.x + q[2])).g(21, num(e.y + q[3])).g(31, '0.0');
+          });
           break;
         }
 

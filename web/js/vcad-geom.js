@@ -172,6 +172,21 @@
   }
 
 
+
+  /**
+   * The two barbs of an arrowhead: tip at (0,0) pointing along `ang`, swept
+   * back by `a`. Shared shape with the dimension arrows so they match.
+   */
+  function arrowBarbs(ang, a) {
+    var ux = -Math.cos(ang), uy = -Math.sin(ang);   // back along the shaft
+    var px = -uy, py = ux;
+    var out = [];
+    for (var k = -1; k <= 1; k += 2) {
+      out.push([0, 0, ux * a + px * a * 0.38 * k, uy * a + py * a * 0.38 * k]);
+    }
+    return out;
+  }
+
   /** The four corners of a rectangle entity, in its own unrotated frame. */
   function rectCorners(e) {
     return [[0, 0], [e.dx, 0], [e.dx, e.dy], [0, e.dy]];
@@ -254,6 +269,26 @@
             });
             lines++;
           }
+          break;
+        }
+
+        case 'arrow': {
+          var ah = (doc.textHeight || 0) * 0.65;
+          if (!(ah > 0)) {
+            ah = Math.hypot(doc.extents.maxx - doc.extents.minx,
+                            doc.extents.maxy - doc.extents.miny) * 0.004;
+          }
+          if (!(ah > 0)) return;
+          arrowBarbs(e.a0, ah).forEach(function (q) {
+            var s0 = apply(m, e.x + q[0], e.y + q[1]);
+            var s1 = apply(m, e.x + q[2], e.y + q[3]);
+            out.push({
+              k: 'l', x1: s0[0], y1: s0[1], x2: s1[0], y2: s1[1],
+              pen: base.pen, ltype: base.ltype, level: base.level,
+              part: base.part, sym: base.sym, rec: base.rec
+            });
+            dims++;
+          });
           break;
         }
 
@@ -449,6 +484,7 @@
   global.VCAD.TEXT_WIDTH_SCALE = TEXT_WIDTH_SCALE;
   global.VCAD.dimSegments = dimSegments;
   global.VCAD.rectCorners = rectCorners;
+  global.VCAD.arrowBarbs = arrowBarbs;
   global.VCAD.angDimSegments = angDimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);

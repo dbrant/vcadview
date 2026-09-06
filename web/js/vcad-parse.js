@@ -16,7 +16,7 @@
 
   // Entity type = low nibble of the subtype byte at 0x4e.
   var T_LINE = 1, T_RECT = 2, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6,
-      T_INSERT = 8, T_ANGDIM = 9;
+      T_ARROW = 7, T_INSERT = 8, T_ANGDIM = 9;
 
   /** Fold an angle into (-PI, PI], so a stored 330 degrees reads as -30. */
   function signedAngle(a) {
@@ -182,7 +182,10 @@
           e.offset = finite(R.f64(r, 0x60), 0);    // dimension line offset
           e.gapHalf = finite(R.f64(r, 0x68), 0);   // half-width of the label gap
           e.gapMid = finite(R.f64(r, 0x70), 0);    // gap centre along the span
-          e.horiz = (R.byte(r, 0x79) & 0x80) !== 0;
+          // Measured axis. The sense is inverted: the bit set means the
+          // dimension measures dY. Picking the wrong axis on a dimension whose
+          // other component is exactly zero draws nothing at all.
+          e.horiz = (R.byte(r, 0x79) & 0x40) === 0;
           break;
 
         case T_ANGDIM:
@@ -208,6 +211,16 @@
           e.c2x = finite(R.f64(r, 0x60), 0); e.c2y = finite(R.f64(r, 0x68), 0);
           e.c3x = finite(R.f64(r, 0x70), 0); e.c3y = finite(R.f64(r, 0x78), 0);
           break;
+        case T_ARROW:
+          // A lone dimension arrowhead: a point and a direction, and nothing
+          // else -- every byte from 0x50 on is zero. Two of them, planted on
+          // the two edges of a feature and pointing at each other, is how a
+          // thickness gets dimensioned. Nothing states the arrow's size, so
+          // the viewer scales it to the drawing's own lettering.
+          e.kind = 'arrow';
+          e.a0 = e.rot;
+          break;
+
         case T_INSERT:
           e.kind = 'insert';
           e.symGroup = R.str(r, 0x50, 9);
@@ -254,6 +267,15 @@
     walk(entStart, nPart1, entities);
     walk(part2Start, nPart2, null);
 
+    // A representative lettering height, used to size arrowheads that carry
+    // no size of their own. The median shrugs off one-off title text.
+    var heights = [];
+    for (var hk in byRecord) {
+      if (byRecord[hk].kind === 'text' && byRecord[hk].h > 0) heights.push(byRecord[hk].h);
+    }
+    heights.sort(function (a, b) { return a - b; });
+    var textHeight = heights.length ? heights[heights.length >> 1] : 0;
+
     // Attach each dimension, linear or angular, to its label: always the
     // record straight after it.
     for (var rk in byRecord) {
@@ -282,6 +304,7 @@
         part2Start: part2Start, nPart2: nPart2, total: R.n
       },
       warnings: warnings,
+      textHeight: textHeight,
       stats: stats
     };
   }
