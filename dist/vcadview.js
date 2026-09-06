@@ -183,10 +183,14 @@
           e.offset = finite(R.f64(r, 0x60), 0);    // dimension line offset
           e.gapHalf = finite(R.f64(r, 0x68), 0);   // half-width of the label gap
           e.gapMid = finite(R.f64(r, 0x70), 0);    // gap centre along the span
-          // Measured axis. The sense is inverted: the bit set means the
-          // dimension measures dY. Picking the wrong axis on a dimension whose
-          // other component is exactly zero draws nothing at all.
-          e.horiz = (R.byte(r, 0x79) & 0x40) === 0;
+          // Measured axis, in the top two bits of 0x79: 2 = horizontal,
+          // 1 = vertical. Those two never disagree with the geometry. Code 0
+          // states no axis, so fall back on whichever component is actually
+          // measured -- picking the zero one would draw nothing at all.
+          var axis = R.byte(r, 0x79) >> 6;
+          e.horiz = axis === 2 ? true
+                  : axis === 1 ? false
+                  : !(Math.abs(e.dx) < 1e-12 && Math.abs(e.dy) >= 1e-12);
           break;
 
         case T_ANGDIM:

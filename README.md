@@ -85,10 +85,10 @@ label), free-standing arrowheads for hand-placed leaders, and symbol placement
 with rotation, scaling and mirroring, nested to any depth. Pens, line types,
 part names and the drawing's own extents are read.
 
-Every entity type present in the sample drawings is decoded — nine types across
-23,264 entities, with nothing left over. Should an unknown one ever turn up, it
-is skipped and counted rather than guessed at, and the side panel reports it
-under **Not drawn**, so a drawing that is quietly missing something says so.
+Every known entity type is decoded — nine types across the corpus of drawings
+that were recovered. Should an unknown one ever turn up, it is skipped and
+counted rather than guessed at, and the side panel reports it under **Not
+drawn**, so a drawing that is quietly missing something says so.
 
 VersaCAD **5.2, 5.4, 6.0 and 7.0** files all load; the reader detects the
 version and adapts, which matters because text sizing changed from `double` to

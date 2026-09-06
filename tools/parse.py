@@ -89,7 +89,10 @@ class Doc:
             e['offset'] = f64(r, 0x60)
             e['gapHalf'] = f64(r, 0x68)
             e['gapMid'] = f64(r, 0x70)
-            e['horiz'] = (r[0x79] & 0x40) == 0
+            axis = r[0x79] >> 6            # 2 = horizontal, 1 = vertical
+            e['horiz'] = (True if axis == 2 else
+                          False if axis == 1 else
+                          not (abs(e['dx']) < 1e-12 and abs(e['dy']) >= 1e-12))
         elif t == 7:
             e['kind'] = 'arrow'
             v = f64(r, 0x3c)                      # same clamp as the JS reader
