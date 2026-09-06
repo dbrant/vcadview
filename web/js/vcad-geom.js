@@ -224,11 +224,13 @@
           }
           inserts++;
           var cr = Math.cos(e.rot), sr = Math.sin(e.rot);
-          // world = T(insert) . R(rot) . S(sx,sy) . T(-base)
-          var local = mul(
-            [cr, sr, -sr, cr, e.x, e.y],
-            mul([e.sx, 0, 0, e.sy, 0, 0], [1, 0, 0, 1, -sym.baseX, -sym.baseY])
-          );
+          // world = T(insert) . R(rot) . S(sx, sy)
+          //
+          // The symbol body's own origin goes to the insertion point; the base
+          // point in the symbol table is a reference mark inside the body (it
+          // coincides with the first entity), not the origin to place from.
+          // Subtracting it drags every placement off by the base offset.
+          var local = mul([cr, sr, -sr, cr, e.x, e.y], [e.sx, 0, 0, e.sy, 0, 0]);
           emitRange(sym.start, sym.count, mul(m, local), depth + 1,
                     sym.group + '/' + sym.name);
           break;

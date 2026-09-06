@@ -156,8 +156,7 @@ def flatten(d):
             sx = sx if (sx == sx and sx != 0) else 1.0
             sy = sy if (sy == sy and sy != 0) else 1.0
             cr, sr = math.cos(ro), math.sin(ro)
-            local = mul([cr, sr, -sr, cr, e['x'], e['y']],
-                        mul([sx, 0, 0, sy, 0, 0], [1, 0, 0, 1, -s['bx'], -s['by']]))
+            local = mul([cr, sr, -sr, cr, e['x'], e['y']], [sx, 0, 0, sy, 0, 0])
             emit_range(s['start'], s['n'], mul(m, local), depth+1)
 
     for e in d.ents:

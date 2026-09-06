@@ -285,7 +285,9 @@
     blocks.forEach(function (b) {
       var n = blockName(b.sym);
       w.g(0, 'BLOCK').g(8, '0').g(2, n).g(70, '0')
-       .g(10, num(b.sym.baseX)).g(20, num(b.sym.baseY)).g(30, '0.0').g(3, n);
+       // Block base point is the body's own origin, matching how VersaCAD
+       // places a symbol; INSERT then needs no compensating offset.
+       .g(10, '0.0').g(20, '0.0').g(30, '0.0').g(3, n);
       writeEntities(w, doc, b.list, layerOf, opts);
       w.g(0, 'ENDBLK').g(8, '0');
     });

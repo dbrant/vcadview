@@ -50,9 +50,8 @@ def emit(d, syms, byrec, segs, lo, hi, M, depth=0):
             ix, iy = f64(r,0x1c), f64(r,0x24)
             rot = f64(r,0x3c); sx = f64(r,0x6b); sy = f64(r,0x73)
             co, si = math.cos(rot), math.sin(rot)
-            bx, by = s['bx'], s['by']
-            def M2(px, py, _M=M, bx=bx, by=by, sx=sx, sy=sy, co=co, si=si, ix=ix, iy=iy):
-                ux, uy = (px-bx)*sx, (py-by)*sy
+            def M2(px, py, _M=M, sx=sx, sy=sy, co=co, si=si, ix=ix, iy=iy):
+                ux, uy = px*sx, py*sy
                 return _M(ix + ux*co - uy*si, iy + ux*si + uy*co)
             emit(d, syms, byrec, segs, s['start'], s['start']+s['n'], M2, depth+1)
 

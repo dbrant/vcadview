@@ -267,16 +267,31 @@ point, which is how VersaCAD stores a spline.
 | `0x6B` | f64 | X scale (negative mirrors) |
 | `0x73` | f64 | Y scale |
 
-The `÷ 2` looks odd but resolves all 617 inserts across the samples with no
-misses and no ambiguity; the low bit carries something else. A symbol is
-identified by the pair *(group name, id ÷ 2)* — the index alone is not unique,
-since indices restart per group.
+The `÷ 2` looks odd but resolves every insert in the set with no misses and no
+ambiguity; the low bit carries something else. A symbol is identified by the
+pair *(group name, id ÷ 2)* — the index alone is not unique, since indices
+restart per group.
 
 The placement transform is
 
 ```
-world = T(insertion) · R(rotation) · S(scaleX, scaleY) · T(−symbol base point)
+world = T(insertion) · R(rotation) · S(scaleX, scaleY)
 ```
+
+**The symbol body's own origin is what lands on the insertion point.** There is
+no base point in this transform, which is the trap: the symbol table does carry
+a point (§4) that looks like an insertion base, and subtracting it drags every
+placement off by that offset. Two independent checks say not to:
+
+* A fastener symbol's washer circle sits at its body's local base-point
+  coordinates, and must end up on a drilled hole in the part. Across 468
+  inserts with a non-zero base point, the circle lands on an existing hole in
+  **59** cases if the base is *not* subtracted, and in **0** cases if it is.
+* Where several copies of a standing figure are placed along one floor line,
+  their insertion points share a Y value that matches a long horizontal line in
+  the drawing to two decimal places. Their feet — local Y = 0 in the body —
+  reach it only without the subtraction. With it they scatter, because the
+  offset is rotated and mirrored differently for each copy.
 
 ### 3.7 Types not decoded
 
@@ -313,7 +328,7 @@ just looking subtly wrong. Nothing is invented to fill the gap.
 | `0x16` | u16 | **absolute record index** where the symbol body starts |
 | `0x18` | u16 | number of records in the body |
 | `0x1A`, `0x22` | f64 | symbol extent |
-| `0x2A`, `0x32` | f64 | symbol **base point** — what an insert aligns to |
+| `0x2A`, `0x32` | f64 | a reference point *inside* the body — **not** the placement origin (§3.6) |
 
 The bodies referenced by the table tile part 2 of the entity section exactly,
 end to end, which is a strong confirmation that `0x16`/`0x18` are read right.
@@ -329,9 +344,10 @@ is arithmetic: the symbol table's declared extent only closes when the `0x66`
 record is counted. In one symbol that record is an ellipse whose top lands at
 68.299, against a declared extent of 68.293.
 
-Geometry is stored in the drawing's own coordinates around the symbol's base
-point, so placing it means translating by `insertion − base`, then scaling and
-rotating. Bodies may contain further inserts; nesting is supported.
+Geometry is stored in the body's own coordinate system, whose origin is what
+lands on the insertion point — so placing it means scaling and rotating about
+that origin and translating to the insertion point, with no base-point
+correction (§3.6). Bodies may contain further inserts; nesting is supported.
 
 ---
 
