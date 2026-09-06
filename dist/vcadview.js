@@ -16,8 +16,8 @@
   }
 
   // Entity type = low nibble of the subtype byte at 0x4e.
-  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8,
-      T_ANGDIM = 9;
+  var T_LINE = 1, T_RECT = 2, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6,
+      T_INSERT = 8, T_ANGDIM = 9;
 
   /** Fold an angle into (-PI, PI], so a stored 330 degrees reads as -30. */
   function signedAngle(a) {
@@ -131,6 +131,16 @@
           e.dx = finite(R.f64(r, 0x50), 0);
           e.dy = finite(R.f64(r, 0x58), 0);
           break;
+        case T_RECT:
+          // A rectangle, stored exactly like a line: one corner and the offset
+          // to the opposite one. The rotation at 0x3C turns it about the first
+          // corner, and is not optional -- one rectangle only lines up with its
+          // neighbours once its half turn is applied.
+          e.kind = 'rect';
+          e.dx = finite(R.f64(r, 0x50), 0);
+          e.dy = finite(R.f64(r, 0x58), 0);
+          break;
+
         case T_ARC:
           e.kind = 'arc';
           e.rx = finite(R.f64(r, 0x50), 0);
@@ -460,6 +470,12 @@
     return { lines: lines, arcs: arcs };
   }
 
+
+  /** The four corners of a rectangle entity, in its own unrotated frame. */
+  function rectCorners(e) {
+    return [[0, 0], [e.dx, 0], [e.dx, e.dy], [0, e.dy]];
+  }
+
   function isFullTurn(a1, a2) {
     var s = (a2 - a1) % TAU;
     if (s < 0) s += TAU;
@@ -519,6 +535,24 @@
           base.k = 'b';
           base.p = [p0[0], p0[1], p1[0], p1[1], p2[0], p2[1], p3[0], p3[1]];
           out.push(base); bez++;
+          break;
+        }
+
+        case 'rect': {
+          if (!e.dx && !e.dy) return;
+          var rc = Math.cos(e.rot), rs = Math.sin(e.rot);
+          var rm = mul(m, [rc, rs, -rs, rc, e.x, e.y]);
+          var cs = rectCorners(e).map(function (c) { return apply(rm, c[0], c[1]); });
+          for (var ri = 0; ri < 4; ri++) {
+            var A = cs[ri], B = cs[(ri + 1) % 4];
+            if (A[0] === B[0] && A[1] === B[1]) continue;
+            out.push({
+              k: 'l', x1: A[0], y1: A[1], x2: B[0], y2: B[1],
+              pen: base.pen, ltype: base.ltype, level: base.level,
+              part: base.part, sym: base.sym, rec: base.rec
+            });
+            lines++;
+          }
           break;
         }
 
@@ -713,6 +747,7 @@
   global.VCAD.arcSweep = arcSweep;
   global.VCAD.TEXT_WIDTH_SCALE = TEXT_WIDTH_SCALE;
   global.VCAD.dimSegments = dimSegments;
+  global.VCAD.rectCorners = rectCorners;
   global.VCAD.angDimSegments = angDimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1129,6 +1164,17 @@
           w.g(10, num(e.x)).g(20, num(e.y)).g(30, '0.0');
           w.g(11, num(e.x + e.dx)).g(21, num(e.y + e.dy)).g(31, '0.0');
           break;
+
+        case 'rect': {
+          if (!e.dx && !e.dy) break;
+          var rc = Math.cos(e.rot), rs = Math.sin(e.rot);
+          var pts = [];
+          VCAD.rectCorners(e).forEach(function (c) {
+            pts.push(e.x + c[0] * rc - c[1] * rs, e.y + c[0] * rs + c[1] * rc);
+          });
+          polyline(w, pts, layer, color, lt, true);
+          break;
+        }
 
         case 'arc': {
           var full = VCAD.isFullTurn(e.a1, e.a2);

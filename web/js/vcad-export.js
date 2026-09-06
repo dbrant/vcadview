@@ -67,6 +67,17 @@
           w.g(11, num(e.x + e.dx)).g(21, num(e.y + e.dy)).g(31, '0.0');
           break;
 
+        case 'rect': {
+          if (!e.dx && !e.dy) break;
+          var rc = Math.cos(e.rot), rs = Math.sin(e.rot);
+          var pts = [];
+          VCAD.rectCorners(e).forEach(function (c) {
+            pts.push(e.x + c[0] * rc - c[1] * rs, e.y + c[0] * rs + c[1] * rc);
+          });
+          polyline(w, pts, layer, color, lt, true);
+          break;
+        }
+
         case 'arc': {
           var full = VCAD.isFullTurn(e.a1, e.a2);
           var sweep = VCAD.arcSweep(e.a1, e.a2, e.cw);

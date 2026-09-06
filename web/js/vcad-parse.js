@@ -15,8 +15,8 @@
   }
 
   // Entity type = low nibble of the subtype byte at 0x4e.
-  var T_LINE = 1, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6, T_INSERT = 8,
-      T_ANGDIM = 9;
+  var T_LINE = 1, T_RECT = 2, T_ARC = 3, T_TEXT = 4, T_DIM = 5, T_BEZIER = 6,
+      T_INSERT = 8, T_ANGDIM = 9;
 
   /** Fold an angle into (-PI, PI], so a stored 330 degrees reads as -30. */
   function signedAngle(a) {
@@ -130,6 +130,16 @@
           e.dx = finite(R.f64(r, 0x50), 0);
           e.dy = finite(R.f64(r, 0x58), 0);
           break;
+        case T_RECT:
+          // A rectangle, stored exactly like a line: one corner and the offset
+          // to the opposite one. The rotation at 0x3C turns it about the first
+          // corner, and is not optional -- one rectangle only lines up with its
+          // neighbours once its half turn is applied.
+          e.kind = 'rect';
+          e.dx = finite(R.f64(r, 0x50), 0);
+          e.dy = finite(R.f64(r, 0x58), 0);
+          break;
+
         case T_ARC:
           e.kind = 'arc';
           e.rx = finite(R.f64(r, 0x50), 0);

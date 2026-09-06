@@ -1,6 +1,7 @@
 """Python reference: dump the flattened display list in the same canonical
 text form as tools/dump-prims.js, so the two implementations can be diffed."""
 import sys, os, math
+from decimal import Decimal, ROUND_HALF_UP
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rec import *
 from parse import Doc
@@ -156,6 +157,19 @@ def flatten(d):
             for j in range(3):
                 pts.append(ap(m, e['x'] + cs[j*2], e['y'] + cs[j*2+1]))
             out.append(('b',) + tuple(v for q in pts for v in q) + (pen, lt))
+        elif k == 'rect':
+            if not e['dx'] and not e['dy']:
+                return
+            ro = rot_of(e)
+            rc, rs = math.cos(ro), math.sin(ro)
+            rm = mul(m, [rc, rs, -rs, rc, e['x'], e['y']])
+            cs = [ap(rm, cx, cy) for cx, cy in
+                  ((0, 0), (e['dx'], 0), (e['dx'], e['dy']), (0, e['dy']))]
+            for i in range(4):
+                a, b = cs[i], cs[(i+1) % 4]
+                if a == b:
+                    continue
+                out.append(('l', a[0], a[1], b[0], b[1], pen, lt))
         elif k == 'dim':
             ds = dim_segments(e)
             if not ds:
@@ -215,7 +229,17 @@ def flatten(d):
 
 
 def fmt(v):
-    return '%.6f' % (0.0 if abs(v) < 5e-7 else v)
+    """Format exactly as JavaScript's toFixed(6) does.
+
+    Coordinates here are often dyadic fractions such as 56.0390625, which land
+    exactly on the rounding boundary at six decimals. Python's %f rounds those
+    half-to-even and JS rounds them away from zero, so the two dumps would
+    differ on formatting alone. Decimal(v) takes the double's exact value and
+    ROUND_HALF_UP matches what toFixed specifies.
+    """
+    if abs(v) < 5e-7:
+        v = 0.0
+    return f"{Decimal(v).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP):.6f}"
 
 
 if __name__ == '__main__':

@@ -1,8 +1,8 @@
 # The VersaCAD `.2D` drawing format
 
 There is no published specification for this format. Everything below was
-reverse engineered from a working set of twelve drawings spanning VersaCAD
-5.2, 5.4, 6.0 and 7.0, containing about 22,600 entities between them. Those
+reverse engineered from a working set of fourteen drawings spanning VersaCAD
+5.2, 5.4, 6.0 and 7.0, containing about 23,100 entities between them. Those
 drawings are not redistributed with this repository, so the evidence for each
 reading is quoted here as counts and measurements rather than as a pointer to
 a particular file.
@@ -45,7 +45,7 @@ raw string data — the tag byte of such a record is just a character, and
 the three tags actually observed, and a walk that loses its place complains
 instead of drawing nonsense. The only reliable way to walk the file is the
 section counts in the header plus the per-entity "consumed records" rule in
-§3.3.
+§3.4.
 
 ### Sections
 
@@ -72,7 +72,7 @@ Laying those end to end:
 [.. end)                                     zero padding to a 512-byte multiple
 ```
 
-This is exact for all twelve samples: the computed end always lands precisely on
+This is exact for every one of them: the computed end always lands precisely on
 the start of the zero padding.
 
 ### Header record 1 (tag `0x10`) — drawing extents
@@ -110,8 +110,8 @@ Every entity record (tag `0x64`, `0x65` or `0x66`) shares this frame:
 | `0x3C` | f64 | rotation in radians (arcs, text, symbol inserts) | solid |
 | `0x44` | char[7] | part / layer name, NUL-padded (`new` is the default) | solid |
 | `0x4E` | u8 | subtype — **low nibble is the entity type** | solid |
-| `0x73` | u8 | flag byte; bit `0x40` is the arc sweep direction (§3.2) | solid |
-| `0x79` | u8 | flag byte; bit `0x80` is the dimension axis (§3.4) | solid |
+| `0x73` | u8 | flag byte; bit `0x40` is the arc sweep direction (§3.3) | solid |
+| `0x79` | u8 | flag byte; bit `0x80` is the dimension axis (§3.5) | solid |
 
 The high nibble of `0x4E` varies (0–11) and is not needed to draw; it tracks
 with drawing structure rather than appearance.
@@ -133,7 +133,28 @@ and line type 4 picks out exactly the axis centrelines of turned parts.
 
 The end point is `(x + Δx, y + Δy)`. Lines are the most common entity by far.
 
-### 3.2 Type 3 — arc / elliptical arc
+### 3.2 Type 2 — rectangle
+
+| Offset | Type | Meaning |
+|--------|------|---------|
+| `0x50` | f64 | ΔX to the opposite corner |
+| `0x58` | f64 | ΔY to the opposite corner |
+| `0x3C` | f64 | rotation about the first corner, radians |
+
+Stored exactly like a line (§3.1) — `(0x1C, 0x24)` is one corner and the delta
+reaches the diagonally opposite one — but drawn as the four sides of the box.
+
+**The rotation is not optional.** Three small rectangles that plug gaps in a
+run of vertical lines all measure 0.5156 × 0.5781, and two of them span the
+same Y band directly. The third carries a half turn at `0x3C`; only once that
+is applied does it span that band too instead of sitting one box-height above
+it. Each rectangle is then centred to the last decimal on the vertical line
+above it, which stops at its top edge — the box fills the gap exactly.
+
+A drawing whose only entity is one of these renders as an empty sheet if the
+type is skipped, which is what makes it worth handling even though it is rare.
+
+### 3.3 Type 3 — arc / elliptical arc
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -168,7 +189,7 @@ ellipses. Radii are always positive in every sample.
 Bit `0x80` of the same byte is set on 38 arcs and 36 lines; its meaning is
 unknown and ignoring it costs nothing visible.
 
-### 3.3 Type 4 — text
+### 3.4 Type 4 — text
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -213,7 +234,7 @@ The stroke font itself is not in the file. A viewer has to substitute; because
 the advance is a fixed value per character, a monospaced font is the closest
 match.
 
-### 3.4 Type 5 — linear dimension
+### 3.5 Type 5 — linear dimension
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -245,7 +266,7 @@ Nothing in the record describes the arrowheads or the tick style, so a viewer
 has to choose: this one draws barbed arrows scaled to 0.65 × the label height
 and capped at a fifth of the span.
 
-### 3.5 Type 6 — cubic Bézier
+### 3.6 Type 6 — cubic Bézier
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -256,7 +277,7 @@ and capped at a fifth of the span.
 Consecutive Bézier entities chain: each one's end point is the next one's start
 point, which is how VersaCAD stores a spline.
 
-### 3.6 Type 8 — symbol insert
+### 3.7 Type 8 — symbol insert
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -293,7 +314,7 @@ placement off by that offset. Two independent checks say not to:
   reach it only without the subtraction. With it they scatter, because the
   offset is rotated and mirrored differently for each copy.
 
-### 3.7 Type 9 — angular dimension
+### 3.8 Type 9 — angular dimension
 
 | Offset | Type | Meaning |
 |--------|------|---------|
@@ -304,7 +325,7 @@ placement off by that offset. Two independent checks say not to:
 | `0x74` | **f32** | half-width of the gap left for the label, radians |
 | `0x78` | **f32** | position of that gap's centre along the sweep, radians |
 
-The layout mirrors the linear dimension (§3.4) with angles in place of
+The layout mirrors the linear dimension (§3.5) with angles in place of
 distances, and like it the label is the type 4 text entity in the **following**
 record.
 
@@ -327,7 +348,7 @@ dimension in the set, each within the label's own half-height. Taking `0x68`
 alone leaves the arc drawn short, stranded well inside its label.
 
 The three trailing values are 32-bit floats even in 5.2 files, unlike text
-sizing (§3.3) which is version-dependent. The sweep is signed and can be stored
+sizing (§3.4) which is version-dependent. The sweep is signed and can be stored
 as its positive complement, so fold it into (−π, π]: a stored 330° is a 30°
 angle measured the other way round. The check that this is right is that the
 gap centre then lands at half the sweep, which is where an untouched label
@@ -336,16 +357,11 @@ sits — it holds for every angular dimension in the set, in both signs.
 Nothing in the record repeats the measured angle in degrees; that only exists
 as the label text, which the draughtsman could and sometimes did edit.
 
-### 3.8 Types not decoded
+### 3.9 Types not decoded
 
-Two types remain unidentified, **6 records out of 22,600** between them:
-
-* **Type 2** (1 record). Laid out exactly like a line — start point plus a
-  delta at `0x50`/`0x58` — but its endpoints do not meet any neighbouring
-  geometry, so it is probably a leader or a construction line rather than an
-  edge.
-* **Type 7** (5 records). A point and a rotation at `0x3C`, and nothing else:
-  every byte from `0x50` on is zero. Too little to draw without inventing it.
+One type remains unidentified: **type 7**, 5 records out of 23,100. It carries
+a point and a rotation at `0x3C` and nothing else — every byte from `0x50` on
+is zero, which is too little to draw without inventing it.
 
 The policy for anything unrecognised is the same throughout, and does not
 depend on which drawing is open: a record whose entity type is not understood
@@ -369,7 +385,7 @@ just looking subtly wrong. Nothing is invented to fill the gap.
 | `0x16` | u16 | **absolute record index** where the symbol body starts |
 | `0x18` | u16 | number of records in the body |
 | `0x1A`, `0x22` | f64 | symbol extent |
-| `0x2A`, `0x32` | f64 | a reference point *inside* the body — **not** the placement origin (§3.6) |
+| `0x2A`, `0x32` | f64 | a reference point *inside* the body — **not** the placement origin (§3.7) |
 
 The bodies referenced by the table tile part 2 of the entity section exactly,
 end to end, which is a strong confirmation that `0x16`/`0x18` are read right.
@@ -388,7 +404,7 @@ record is counted. In one symbol that record is an ellipse whose top lands at
 Geometry is stored in the body's own coordinate system, whose origin is what
 lands on the insertion point — so placing it means scaling and rotating about
 that origin and translating to the insertion point, with no base-point
-correction (§3.6). Bodies may contain further inserts; nesting is supported.
+correction (§3.7). Bodies may contain further inserts; nesting is supported.
 
 ---
 
@@ -429,7 +445,7 @@ plot setups; they hold no drawing content and are skipped.
   only the header section counts and hits the zero padding exactly, with **no
   unrecognised records**.
 * The browser reader (`web/js/vcad-parse.js` + `vcad-geom.js`) is compared
-  against the Python reference primitive by primitive — 26,334 primitives,
+  against the Python reference primitive by primitive — 26,837 primitives,
   byte-identical output.
 * Exported DXF is read back and compared with the source geometry: total path
   length within 0.25 %, bounding box to 5 decimal places, and every text string
@@ -442,7 +458,7 @@ Run `python tools/verify.py` to reproduce all of it.
 
 * Byte `0x00` flags, bit `0x80` of byte `0x73`, and the high nibble of the
   subtype byte `0x4E`.
-* Entity types 2 and 7, and bit `0x01` of the entity tag.
+* Entity type 7, and bit `0x01` of the entity tag.
 * Bytes `0x03`, `0x04` and `0x06` of the entity shell.
 * The exact meaning of the low bit of the insert's symbol id.
 * Header records 2–6 beyond the extents (grid, snap, dimension defaults).

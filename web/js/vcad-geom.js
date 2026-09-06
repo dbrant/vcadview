@@ -171,6 +171,12 @@
     return { lines: lines, arcs: arcs };
   }
 
+
+  /** The four corners of a rectangle entity, in its own unrotated frame. */
+  function rectCorners(e) {
+    return [[0, 0], [e.dx, 0], [e.dx, e.dy], [0, e.dy]];
+  }
+
   function isFullTurn(a1, a2) {
     var s = (a2 - a1) % TAU;
     if (s < 0) s += TAU;
@@ -230,6 +236,24 @@
           base.k = 'b';
           base.p = [p0[0], p0[1], p1[0], p1[1], p2[0], p2[1], p3[0], p3[1]];
           out.push(base); bez++;
+          break;
+        }
+
+        case 'rect': {
+          if (!e.dx && !e.dy) return;
+          var rc = Math.cos(e.rot), rs = Math.sin(e.rot);
+          var rm = mul(m, [rc, rs, -rs, rc, e.x, e.y]);
+          var cs = rectCorners(e).map(function (c) { return apply(rm, c[0], c[1]); });
+          for (var ri = 0; ri < 4; ri++) {
+            var A = cs[ri], B = cs[(ri + 1) % 4];
+            if (A[0] === B[0] && A[1] === B[1]) continue;
+            out.push({
+              k: 'l', x1: A[0], y1: A[1], x2: B[0], y2: B[1],
+              pen: base.pen, ltype: base.ltype, level: base.level,
+              part: base.part, sym: base.sym, rec: base.rec
+            });
+            lines++;
+          }
           break;
         }
 
@@ -424,6 +448,7 @@
   global.VCAD.arcSweep = arcSweep;
   global.VCAD.TEXT_WIDTH_SCALE = TEXT_WIDTH_SCALE;
   global.VCAD.dimSegments = dimSegments;
+  global.VCAD.rectCorners = rectCorners;
   global.VCAD.angDimSegments = angDimSegments;
   global.VCAD.isFullTurn = isFullTurn;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -71,6 +71,9 @@ class Doc:
         t = e['type']
         if t == 1:
             e['kind'] = 'line'; e['dx'] = f64(r, 0x50); e['dy'] = f64(r, 0x58)
+        elif t == 2:
+            e['kind'] = 'rect'
+            e['dx'] = f64(r, 0x50); e['dy'] = f64(r, 0x58)
         elif t == 3:
             e['kind'] = 'arc'
             e['rx'] = f64(r, 0x50); e['ry'] = f64(r, 0x58)
